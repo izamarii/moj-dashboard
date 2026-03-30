@@ -31,100 +31,50 @@
 <script type="text/babel">
 const {useState,useEffect,useRef,useCallback}=React;
 
-// ── IndexedDB storage (survives history clear) ──
+// ── IndexedDB ──
 const DB_NAME="dashboard_db",DB_VER=1;
-function openDB(){
-  return new Promise((res,rej)=>{
-    const req=indexedDB.open(DB_NAME,DB_VER);
-    req.onupgradeneeded=e=>{const db=e.target.result;if(!db.objectStoreNames.contains("store"))db.createObjectStore("store");};
-    req.onsuccess=e=>res(e.target.result);
-    req.onerror=e=>rej(e.target.error);
-  });
-}
+function openDB(){return new Promise((res,rej)=>{const req=indexedDB.open(DB_NAME,DB_VER);req.onupgradeneeded=e=>{const db=e.target.result;if(!db.objectStoreNames.contains("store"))db.createObjectStore("store");};req.onsuccess=e=>res(e.target.result);req.onerror=e=>rej(e.target.error);});}
 async function dbGet(key){const db=await openDB();return new Promise((res,rej)=>{const tx=db.transaction("store","readonly");const req=tx.objectStore("store").get(key);req.onsuccess=e=>res(e.target.result);req.onerror=e=>rej(e.target.error);});}
 async function dbSet(key,val){const db=await openDB();return new Promise((res,rej)=>{const tx=db.transaction("store","readwrite");tx.objectStore("store").put(val,key);tx.oncomplete=()=>res();tx.onerror=e=>rej(e.target.error);});}
 
 function useStorage(key,def){
   const[v,setV]=useState(def);
   const loaded=useRef(false);
-  useEffect(()=>{
-    if(!loaded.current){
-      loaded.current=true;
-      dbGet(key).then(s=>{if(s!==undefined)setV(s);}).catch(()=>{
-        try{const s=localStorage.getItem(key);if(s)setV(JSON.parse(s));}catch{}
-      });
-    }
-  },[key]);
-  const setAndSave=useCallback(valOrFn=>{
-    setV(prev=>{const next=typeof valOrFn==="function"?valOrFn(prev):valOrFn;dbSet(key,next).catch(()=>{try{localStorage.setItem(key,JSON.stringify(next));}catch{}});return next;});
-  },[key]);
+  useEffect(()=>{if(!loaded.current){loaded.current=true;dbGet(key).then(s=>{if(s!==undefined)setV(s);}).catch(()=>{try{const s=localStorage.getItem(key);if(s)setV(JSON.parse(s));}catch{}});}},[key]);
+  const setAndSave=useCallback(valOrFn=>{setV(prev=>{const next=typeof valOrFn==="function"?valOrFn(prev):valOrFn;dbSet(key,next).catch(()=>{try{localStorage.setItem(key,JSON.stringify(next));}catch{}});return next;});},[key]);
   return[v,setAndSave];
 }
 
 function useTheme(){
-  const[dark,setDark]=useState(()=>localStorage.getItem("theme")==="dark");
+  const[dark,setDark]=useState(()=>localStorage.getItem("theme")==="dark"||(!localStorage.getItem("theme")&&window.matchMedia("(prefers-color-scheme: dark)").matches));
   useEffect(()=>{document.body.className=dark?"dark":"light";localStorage.setItem("theme",dark?"dark":"light");},[dark]);
   return[dark,setDark];
 }
 function useC(dark){
-  return dark?{
-    bg:"#1a1612",card:"#231f1a",accent:"#c9a84c",accentLight:"#2a2318",
-    lav:"#9e8a7a",lavLight:"#2a2320",text:"#e8e0d0",muted:"#7a6a50",
-    border:"#3a3020",gold:"#c9a84c",smoke:"#1e1a15",
-    itemBg:"#2a2520",sepLine:"#3a3020",
-  }:{
-    bg:"#f5f0e8",card:"#faf7f2",accent:"#b8965a",accentLight:"#f0e8d8",
-    lav:"#9e8a7a",lavLight:"#ede8e3",text:"#2e2416",muted:"#9a8a72",
-    border:"#e0d4bc",gold:"#c9a84c",smoke:"#f8f4ee",
-    itemBg:"#f0ece4",sepLine:"#e0d4bc",
-  };
+  return dark?{bg:"#1a1612",card:"#231f1a",accent:"#c9a84c",accentLight:"#2a2318",lav:"#9e8a7a",lavLight:"#2a2320",text:"#e8e0d0",muted:"#7a6a50",border:"#3a3020",gold:"#c9a84c",smoke:"#1e1a15",itemBg:"#2a2520",sepLine:"#3a3020"}
+  :{bg:"#f5f0e8",card:"#faf7f2",accent:"#b8965a",accentLight:"#f0e8d8",lav:"#9e8a7a",lavLight:"#ede8e3",text:"#2e2416",muted:"#9a8a72",border:"#e0d4bc",gold:"#c9a84c",smoke:"#f8f4ee",itemBg:"#f0ece4",sepLine:"#e0d4bc"};
 }
+function useStorage2(key,def){return useStorage(key,def);}
 
 const SK_MONTHS=["Január","Február","Marec","Apríl","Máj","Jún","Júl","August","September","Október","November","December"];
+const SK_MONTHS_GEN=["januára","februára","marca","apríla","mája","júna","júla","augusta","septembra","októbra","novembra","decembra"];
 const SK_DAYS_LONG=["Nedeľa","Pondelok","Utorok","Streda","Štvrtok","Piatok","Sobota"];
 const SK_DAYS_SHORT=["Po","Ut","St","Št","Pi","So","Ne"];
 const DOW_LABELS=["Ne","Po","Ut","St","Št","Pi","So"];
 const SK_NAMES={"1-2":"Štefánia","1-3":"Daniela","1-5":"Andrea","1-9":"Alexej","1-10":"Dáša","1-14":"Radovan","1-16":"Kristína","1-20":"Dalibor","1-21":"Vincent","1-22":"Zora","1-23":"Miloš","1-24":"Timotej","1-26":"Tamara","1-28":"Alfonz","1-30":"Ema","1-31":"Erika","2-1":"Brigita","2-3":"Blažej","2-4":"Veronika","2-5":"Agáta","2-6":"Dorota","2-9":"Zdenko","2-10":"Gabriela","2-13":"Valér","2-14":"Valentín","2-16":"Ida","2-17":"Miloslava","2-19":"Vlasta","2-20":"Lívia","2-23":"Roman","2-24":"Matej","2-25":"Frederik","2-27":"Alexander","2-28":"Zlatica","3-1":"Albín","3-4":"Kazimír","3-7":"Tomáš","3-8":"Alan","3-10":"Branislav","3-12":"Gregor","3-14":"Matilda","3-15":"Svetlana","3-17":"Ľubica","3-18":"Eduard","3-19":"Jozef","3-23":"Adrián","3-24":"Gabriel","3-25":"Marián","3-27":"Alena","3-28":"Soňa","3-29":"Miroslav","3-31":"Benjamín","4-1":"Hugo","4-3":"Richard","4-5":"Miroslava","4-7":"Zoltán","4-8":"Albert","4-9":"Milena","4-10":"Igor","4-14":"Tibor","4-16":"Dana","4-17":"Rudolf","4-20":"Marcel","4-23":"Vojtech","4-24":"Juraj","4-25":"Marek","4-27":"Jaroslav","4-28":"Jarmila","4-29":"Lea","4-30":"Anastázia","5-1":"Žitomír","5-4":"Florián","5-7":"Monika","5-8":"Ingrida","5-10":"Viktória","5-15":"Žofia","5-17":"Gizela","5-18":"Viola","5-22":"Júlia","5-24":"Ela","5-26":"Dušan","5-27":"Iveta","5-29":"Marta","5-31":"Petronela","6-1":"Žaneta","6-3":"Karolína","6-4":"Lenka","6-5":"Laura","6-7":"Róbert","6-9":"Stanislava","6-10":"Margaréta","6-13":"Anton","6-16":"Blanka","6-20":"Valéria","6-21":"Alojz","6-22":"Paulína","6-24":"Ján","6-27":"Ladislav","6-28":"Beáta","6-29":"Peter","6-30":"Melánia","7-1":"Diana","7-4":"Prokop","7-5":"Cyril a Metod","7-8":"Ivan","7-9":"Lýdia","7-13":"Margita","7-15":"Henrich","7-18":"Kamila","7-22":"Magdaléna","7-23":"Oľga","7-24":"Vladimír","7-25":"Jakub","7-26":"Anna","7-29":"Marta","7-31":"Ignác","8-4":"Dominik","8-8":"Oskar","8-9":"Ľubomír","8-10":"Vavrinec","8-11":"Zuzana","8-15":"Marcela","8-18":"Elena","8-21":"Jana","8-24":"Bartolomej","8-27":"Silvia","8-29":"Nikola","8-30":"Ružena","8-31":"Nora","9-1":"Ľudmila","9-4":"Rozália","9-5":"Regína","9-7":"Marianna","9-8":"Miriama","9-9":"Martina","9-12":"Mária","9-15":"Jolana","9-21":"Matúš","9-23":"Zdenka","9-25":"Vladislav","9-28":"Václav","9-29":"Michal","9-30":"Jarolím","10-1":"Arnold","10-4":"František","10-5":"Viera","10-7":"Eliška","10-15":"Tereza","10-18":"Lukáš","10-20":"Vendelín","10-26":"Demeter","10-31":"Aurélia","11-1":"Renáta","11-4":"Karol","11-11":"Martin","11-13":"Stanislav","11-15":"Leopold","11-17":"Klaudia","11-19":"Alžbeta","11-22":"Cecília","11-25":"Katarína","11-30":"Ondrej","12-2":"Bibiána","12-4":"Barbora","12-6":"Mikuláš","12-8":"Marína","12-13":"Lucia","12-24":"Štedrý večer","12-25":"Štefan","12-26":"Štefan","12-31":"Silvester"};
 const SK_HOLIDAYS={"1-1":"Nový rok","1-6":"Traja králi","5-1":"Sviatok práce","5-8":"Deň víťazstva","7-5":"Cyril a Metod","8-29":"SNP","9-1":"Deň Ústavy","9-15":"Sedembolestná","11-1":"Všetkých svätých","11-17":"Deň boja za slobodu","12-24":"Štedrý večer","12-25":"Vianoce","12-26":"Štefan"};
 const QUOTES=[
-  {text:"Šťastie závisí od teba samého.",author:"Marcus Aurelius"},
-  {text:"Čas je jediné, čo ti skutočne patrí.",author:"Seneca"},
-  {text:"Nič nie je naše okrem vôle.",author:"Epiktétos"},
-  {text:"Každá prekážka skrýva cestu.",author:"Marcus Aurelius"},
-  {text:"Staraj sa o to, čo závisí od teba.",author:"Epiktétos"},
-  {text:"Múdrosť začína tam, kde prestáva strach.",author:"Seneca"},
-  {text:"Každá ťažkosť je príležitosť pre cnosť.",author:"Marcus Aurelius"},
-  {text:"Pokojný duch je najvyššia odmena.",author:"Seneca"},
-  {text:"Prestaň čakať a začni žiť.",author:"Seneca"},
-  {text:"Kto ovláda seba, ovláda všetko.",author:"Marcus Aurelius"},
-  {text:"Každý deň je malý život.",author:"Seneca"},
-  {text:"Nehľadaj šťastie vonku, je v tebe.",author:"Marcus Aurelius"},
-  {text:"Najlepší čas na konanie je teraz.",author:"Seneca"},
-  {text:"Čo nemôžeš zmeniť, prijmi.",author:"Seneca"},
-  {text:"Každý koniec je novým začiatkom.",author:"Seneca"},
-  {text:"Dnešný deň je tvoj, využi ho naplno.",author:"Marcus Aurelius"},
-  {text:"Nič sa nemení, kým sa ty nezmeníš.",author:"Epiktétos"},
-  {text:"Prvý krok je vždy najťažší, urob ho.",author:"Seneca"},
-  {text:"Sloboda ducha je najväčšie bohatstvo.",author:"Seneca"},
-  {text:"Krása je v jednoduchosti.",author:"Marcus Aurelius"},
+  {text:"Šťastie závisí od teba samého.",author:"Marcus Aurelius"},{text:"Čas je jediné, čo ti skutočne patrí.",author:"Seneca"},
+  {text:"Nič nie je naše okrem vôle.",author:"Epiktétos"},{text:"Každá prekážka skrýva cestu.",author:"Marcus Aurelius"},
+  {text:"Staraj sa o to, čo závisí od teba.",author:"Epiktétos"},{text:"Múdrosť začína tam, kde prestáva strach.",author:"Seneca"},
+  {text:"Každá ťažkosť je príležitosť pre cnosť.",author:"Marcus Aurelius"},{text:"Pokojný duch je najvyššia odmena.",author:"Seneca"},
+  {text:"Prestaň čakať a začni žiť.",author:"Seneca"},{text:"Kto ovláda seba, ovláda všetko.",author:"Marcus Aurelius"},
+  {text:"Každý deň je malý život.",author:"Seneca"},{text:"Nehľadaj šťastie vonku, je v tebe.",author:"Marcus Aurelius"},
+  {text:"Najlepší čas na konanie je teraz.",author:"Seneca"},{text:"Čo nemôžeš zmeniť, prijmi.",author:"Seneca"},
+  {text:"Každý koniec je novým začiatkom.",author:"Seneca"},{text:"Dnešný deň je tvoj, využi ho naplno.",author:"Marcus Aurelius"},
+  {text:"Nič sa nemení, kým sa ty nezmeníš.",author:"Epiktétos"},{text:"Prvý krok je vždy najťažší, urob ho.",author:"Seneca"},
+  {text:"Sloboda ducha je najväčšie bohatstvo.",author:"Seneca"},{text:"Krása je v jednoduchosti.",author:"Marcus Aurelius"},
 ];
-const EMPTY_MSGS={todo:["Čistý stôl, čistá myseľ. ✦","Priestor pre nové veci. ✦"],habits:["Prvý návyk je najdôležitejší. ✦","Začni malým, pokračuj stále. ✦"],challenges:["Výzva čaká na teba. ✦","Čo ťa posunie ďalej? ✦"]};
-const emptyMsg=k=>EMPTY_MSGS[k][Math.floor(Date.now()/86400000)%EMPTY_MSGS[k].length];
-
-const TASK_CATS=[
-  {id:"work",label:"Práca",color:"#c9a84c",icon:`<svg width="15" height="15" viewBox="0 0 16 16" fill="none"><rect x="1" y="5" width="14" height="9" rx="2" stroke="#c9a84c" stroke-width="1.4"/><path d="M5 5V4a3 3 0 0 1 6 0v1" stroke="#c9a84c" stroke-width="1.4"/><rect x="6" y="8" width="4" height="2.5" rx="1" fill="#c9a84c" opacity=".5"/></svg>`},
-  {id:"home",label:"Domácnosť",color:"#9070b8",icon:`<svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M2 7L8 2l6 5v6a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V7z" stroke="#9070b8" stroke-width="1.4"/><rect x="5.5" y="9" width="5" height="5" rx="1" stroke="#9070b8" stroke-width="1.2"/></svg>`},
-  {id:"food",label:"Jedlo",color:"#7a9e7a",icon:`<svg width="15" height="15" viewBox="0 0 16 16" fill="none"><line x1="5" y1="2" x2="5" y2="14" stroke="#7a9e7a" stroke-width="1.4" stroke-linecap="round"/><path d="M3 2v4a2 2 0 0 0 4 0V2" stroke="#7a9e7a" stroke-width="1.4" stroke-linecap="round"/><line x1="11" y1="2" x2="11" y2="14" stroke="#7a9e7a" stroke-width="1.4" stroke-linecap="round"/><path d="M9 2c0 0 3 1.5 3 4s-3 4-3 4" stroke="#7a9e7a" stroke-width="1.3" stroke-linecap="round"/></svg>`},
-  {id:"family",label:"Rodina",color:"#b87850",icon:`<svg width="15" height="15" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="4.5" r="2.2" stroke="#b87850" stroke-width="1.4"/><circle cx="3" cy="6" r="1.6" stroke="#b87850" stroke-width="1.2"/><circle cx="13" cy="6" r="1.6" stroke="#b87850" stroke-width="1.2"/><path d="M1 13.5c0-2 1-3 2.5-3M15 13.5c0-2-1-3-2.5-3M5 13.5c0-2.2 1.3-3.5 3-3.5s3 1.3 3 3.5" stroke="#b87850" stroke-width="1.3" stroke-linecap="round"/></svg>`},
-  {id:"me",label:"Ja",color:"#b870a0",icon:`<svg width="15" height="15" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="5" r="2.5" stroke="#b870a0" stroke-width="1.4"/><path d="M3 14c0-2.8 2.2-5 5-5s5 2.2 5 5" stroke="#b870a0" stroke-width="1.4" stroke-linecap="round"/><path d="M11.2 3.2c.5.4.8 1 .8 1.8" stroke="#b870a0" stroke-width="1.2" stroke-linecap="round"/></svg>`},
-  {id:"other",label:"Ostatné",color:"#9a8a72",icon:`<svg width="15" height="15" viewBox="0 0 16 16" fill="none"><circle cx="4.5" cy="8" r="1.3" fill="#9a8a72"/><circle cx="8" cy="8" r="1.3" fill="#9a8a72"/><circle cx="11.5" cy="8" r="1.3" fill="#9a8a72"/></svg>`},
-];
-const getTC=id=>TASK_CATS.find(c=>c.id===id)||TASK_CATS[5];
-const CatIcon=({id,size=15,opacity=1})=>{const tc=getTC(id);return React.createElement('span',{style:{flexShrink:0,opacity,display:"flex",alignItems:"center"},dangerouslySetInnerHTML:{__html:tc.icon.replace(/width="15" height="15"/g,`width="${size}" height="${size}"`)}});};
-
-// Settings icon SVG
-const SettingsIcon=({size=15,color="#c9a84c"})=><svg width={size} height={size} viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="2.5" stroke={color} strokeWidth="1.4"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.05 3.05l1.42 1.42M11.53 11.53l1.42 1.42M3.05 12.95l1.42-1.42M11.53 4.47l1.42-1.42" stroke={color} strokeWidth="1.3" strokeLinecap="round"/></svg>;
-
 const getDailyQuote=()=>{const n=new Date(),s=new Date(n.getFullYear(),0,0);return QUOTES[Math.floor((n-s)/86400000)%QUOTES.length];};
 const toISO=d=>d.toISOString().split("T")[0];
 const todayStr=()=>toISO(new Date());
@@ -133,182 +83,239 @@ const daysInMonth=(y,m)=>new Date(y,m+1,0).getDate();
 const getWeekNum=d=>{const dt=new Date(d);dt.setHours(12,0,0,0);const day=dt.getDay()||7;dt.setDate(dt.getDate()+4-day);const yearStart=new Date(dt.getFullYear(),0,1);return Math.ceil((((dt-yearStart)/86400000)+1)/7);};
 const weekMonday=dateStr=>{const d=new Date(dateStr+"T12:00");d.setDate(d.getDate()-monOffset(d.getDay()));return toISO(d);};
 
-const REPEAT_OPTIONS=[["daily","Denne"],["xweek","x-krát/týždeň"],["weekly","Týždenne"],["custom","Vlastné dni"]]; // kept for task forms
+// ── SVG Icons ──
+const ICONS={
+  work:`<svg width="SIZE" height="SIZE" viewBox="0 0 16 16" fill="none"><rect x="1" y="5" width="14" height="9" rx="2" stroke="COLOR" stroke-width="1.4"/><path d="M5 5V4a3 3 0 0 1 6 0v1" stroke="COLOR" stroke-width="1.4"/><rect x="6" y="8" width="4" height="2.5" rx="1" fill="COLOR" opacity=".5"/></svg>`,
+  home:`<svg width="SIZE" height="SIZE" viewBox="0 0 16 16" fill="none"><path d="M2 7L8 2l6 5v6a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V7z" stroke="COLOR" stroke-width="1.4"/><rect x="5.5" y="9" width="5" height="5" rx="1" stroke="COLOR" stroke-width="1.2"/></svg>`,
+  food:`<svg width="SIZE" height="SIZE" viewBox="0 0 16 16" fill="none"><line x1="5" y1="2" x2="5" y2="14" stroke="COLOR" stroke-width="1.4" stroke-linecap="round"/><path d="M3 2v4a2 2 0 0 0 4 0V2" stroke="COLOR" stroke-width="1.4" stroke-linecap="round"/><line x1="11" y1="2" x2="11" y2="14" stroke="COLOR" stroke-width="1.4" stroke-linecap="round"/><path d="M9 2c0 0 3 1.5 3 4s-3 4-3 4" stroke="COLOR" stroke-width="1.3" stroke-linecap="round"/></svg>`,
+  family:`<svg width="SIZE" height="SIZE" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="4.5" r="2.2" stroke="COLOR" stroke-width="1.4"/><circle cx="3" cy="6" r="1.6" stroke="COLOR" stroke-width="1.2"/><circle cx="13" cy="6" r="1.6" stroke="COLOR" stroke-width="1.2"/><path d="M1 13.5c0-2 1-3 2.5-3M15 13.5c0-2-1-3-2.5-3M5 13.5c0-2.2 1.3-3.5 3-3.5s3 1.3 3 3.5" stroke="COLOR" stroke-width="1.3" stroke-linecap="round"/></svg>`,
+  me:`<svg width="SIZE" height="SIZE" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="5" r="2.5" stroke="COLOR" stroke-width="1.4"/><path d="M3 14c0-2.8 2.2-5 5-5s5 2.2 5 5" stroke="COLOR" stroke-width="1.4" stroke-linecap="round"/><path d="M11.2 3.2c.5.4.8 1 .8 1.8" stroke="COLOR" stroke-width="1.2" stroke-linecap="round"/></svg>`,
+  other:`<svg width="SIZE" height="SIZE" viewBox="0 0 16 16" fill="none"><circle cx="4.5" cy="8" r="1.3" fill="COLOR"/><circle cx="8" cy="8" r="1.3" fill="COLOR"/><circle cx="11.5" cy="8" r="1.3" fill="COLOR"/></svg>`,
+  settings:`<svg width="SIZE" height="SIZE" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="2.5" stroke="COLOR" stroke-width="1.4"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.05 3.05l1.42 1.42M11.53 11.53l1.42 1.42M3.05 12.95l1.42-1.42M11.53 4.47l1.42-1.42" stroke="COLOR" stroke-width="1.3" stroke-linecap="round"/></svg>`,
+  star:`<svg width="SIZE" height="SIZE" viewBox="0 0 16 16" fill="none"><path d="M8 2l1.6 4.8H14l-4 2.9 1.5 4.7L8 11.5l-3.5 2.9 1.5-4.7-4-2.9h4.4z" fill="COLOR"/></svg>`,
+  droplet:`<svg width="SIZE" height="SIZE" viewBox="0 0 16 16" fill="none"><path d="M8 2C8 2 3 7.5 3 10.5a5 5 0 0 0 10 0C13 7.5 8 2 8 2z" stroke="COLOR" stroke-width="1.4" fill="FILL"/></svg>`,
+  check:`<svg width="SIZE" height="SIZE" viewBox="0 0 11 8" fill="none"><polyline points="1,4 4,7 10,1" stroke="COLOR" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  journal:`<svg width="SIZE" height="SIZE" viewBox="0 0 16 16" fill="none"><rect x="3" y="1" width="10" height="14" rx="2" stroke="COLOR" stroke-width="1.4"/><line x1="6" y1="5" x2="10" y2="5" stroke="COLOR" stroke-width="1.2" stroke-linecap="round"/><line x1="6" y1="8" x2="10" y2="8" stroke="COLOR" stroke-width="1.2" stroke-linecap="round"/><line x1="6" y1="11" x2="9" y2="11" stroke="COLOR" stroke-width="1.2" stroke-linecap="round"/></svg>`,
+  mood:`<svg width="SIZE" height="SIZE" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="COLOR" stroke-width="1.4"/><circle cx="5.5" cy="6.5" r="1" fill="COLOR"/><circle cx="10.5" cy="6.5" r="1" fill="COLOR"/><path d="M5.5 10c.5 1.5 4.5 1.5 5 0" stroke="COLOR" stroke-width="1.3" stroke-linecap="round"/></svg>`,
+  calendar:`<svg width="SIZE" height="SIZE" viewBox="0 0 16 16" fill="none"><rect x="1" y="3" width="14" height="12" rx="2" stroke="COLOR" stroke-width="1.4"/><line x1="5" y1="1" x2="5" y2="5" stroke="COLOR" stroke-width="1.4" stroke-linecap="round"/><line x1="11" y1="1" x2="11" y2="5" stroke="COLOR" stroke-width="1.4" stroke-linecap="round"/><line x1="1" y1="7" x2="15" y2="7" stroke="COLOR" stroke-width="1.2"/></svg>`,
+  tasks:`<svg width="SIZE" height="SIZE" viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="12" height="12" rx="2" stroke="COLOR" stroke-width="1.4"/><path d="M5 8l2 2 4-4" stroke="COLOR" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  habits:`<svg width="SIZE" height="SIZE" viewBox="0 0 16 16" fill="none"><path d="M3 8a5 5 0 1 0 10 0A5 5 0 0 0 3 8z" stroke="COLOR" stroke-width="1.4"/><path d="M8 5v3l2 1.5" stroke="COLOR" stroke-width="1.3" stroke-linecap="round"/></svg>`,
+  challenges:`<svg width="SIZE" height="SIZE" viewBox="0 0 16 16" fill="none"><path d="M8 2l1.2 3.6H13l-3 2.2 1.1 3.4L8 9.3l-3.1 1.9 1.1-3.4-3-2.2h3.8z" stroke="COLOR" stroke-width="1.3" stroke-linejoin="round"/></svg>`,
+  weight:`<svg width="SIZE" height="SIZE" viewBox="0 0 16 16" fill="none"><path d="M4 13l1.5-6h5L12 13H4z" stroke="COLOR" stroke-width="1.4" stroke-linejoin="round"/><path d="M6.5 7V5a1.5 1.5 0 0 1 3 0v2" stroke="COLOR" stroke-width="1.3"/><line x1="3" y1="13" x2="13" y2="13" stroke="COLOR" stroke-width="1.4" stroke-linecap="round"/></svg>`,
+  stats:`<svg width="SIZE" height="SIZE" viewBox="0 0 16 16" fill="none"><rect x="2" y="9" width="3" height="5" rx="1" fill="COLOR" opacity=".6"/><rect x="6.5" y="5" width="3" height="9" rx="1" fill="COLOR" opacity=".8"/><rect x="11" y="2" width="3" height="12" rx="1" fill="COLOR"/></svg>`,
+};
+const mkIcon=(name,size=15,color="#c9a84c",fill="none")=>ICONS[name]?.replace(/SIZE/g,size).replace(/COLOR/g,color).replace("FILL",fill)||"";
+const SvgIcon=({name,size=15,color="#c9a84c",fill="none",opacity=1,style={}})=>React.createElement("span",{style:{display:"flex",alignItems:"center",flexShrink:0,opacity,...style},dangerouslySetInnerHTML:{__html:mkIcon(name,size,color,fill)}});
 
-const taskDueOn=(t,dateStr)=>{
-  if(!t.repeat||t.repeat==="none")return t.date===dateStr;
-  const d=new Date(dateStr+"T12:00"),dow=d.getDay();
-  if(t.repeat==="daily")return!t.date||dateStr>=t.date;
-  if(t.repeat==="weekly"){if(t.date&&dateStr<t.date)return false;const s=new Date((t.date||dateStr)+"T12:00");return Math.floor((d-s)/86400000)%7===0;}
-  if(t.repeat==="custom"&&t.days){if(t.date&&dateStr<t.date)return false;return t.days.includes(dow);}
-  return false;
-};
+const TASK_CATS=[
+  {id:"work",label:"Práca",color:"#c9a84c",icon:"work"},
+  {id:"home",label:"Domácnosť",color:"#9070b8",icon:"home"},
+  {id:"food",label:"Jedlo",color:"#7a9e7a",icon:"food"},
+  {id:"family",label:"Rodina",color:"#b87850",icon:"family"},
+  {id:"me",label:"Ja",color:"#b870a0",icon:"me"},
+  {id:"other",label:"Ostatné",color:"#9a8a72",icon:"other"},
+];
+const getTC=id=>TASK_CATS.find(c=>c.id===id)||TASK_CATS[5];
+const CatIcon=({id,size=15,opacity=1})=>{const tc=getTC(id);return <SvgIcon name={tc.icon} size={size} color={tc.color} opacity={opacity}/>;};
+
+// Default mood labels
+const DEFAULT_MOODS=[
+  {id:1,label:"Výborná",opacity:1.0},
+  {id:2,label:"Dobrá",opacity:0.8},
+  {id:3,label:"Ok",opacity:0.6},
+  {id:4,label:"Slabšia",opacity:0.4},
+  {id:5,label:"Zlá",opacity:0.25},
+];
+
+// Helpers
+const taskDueOn=(t,dateStr)=>{if(!t.repeat||t.repeat==="none")return t.date===dateStr;const d=new Date(dateStr+"T12:00"),dow=d.getDay();if(t.repeat==="daily")return!t.date||dateStr>=t.date;if(t.repeat==="weekly"){if(t.date&&dateStr<t.date)return false;const s=new Date((t.date||dateStr)+"T12:00");return Math.floor((d-s)/86400000)%7===0;}if(t.repeat==="custom"&&t.days){if(t.date&&dateStr<t.date)return false;return t.days.includes(dow);}return false;};
 const isTaskDoneFn=(t,date)=>t.repeat&&t.repeat!=="none"?!!(t.doneMap&&t.doneMap[date]):t.done;
-// Habit helpers — všetky návyky sú x/7 model
-const habitWeekCount=(h,weekStart)=>{
-  const days=Array.from({length:7},(_,i)=>{const d=new Date(weekStart+"T12:00");d.setDate(d.getDate()+i);return toISO(d);});
-  return days.filter(d=>h.checks&&h.checks[d]).length;
-};
-const habitDueToday=(h,dateStr)=>{
-  const ws=weekMonday(dateStr);
-  const done=habitWeekCount(h,ws);
-  return done<(h.weekTarget||7);
-};
+const habitWeekCount=(h,weekStart)=>{const days=Array.from({length:7},(_,i)=>{const d=new Date(weekStart+"T12:00");d.setDate(d.getDate()+i);return toISO(d);});return days.filter(d=>h.checks&&h.checks[d]).length;};
+const habitDueToday=(h,dateStr)=>{const ws=weekMonday(dateStr);return habitWeekCount(h,ws)<(h.weekTarget||7);};
 const habitDoneOn=(h,date)=>!!(h.checks&&h.checks[date]);
 
-function useDragList(items,setItems){
-  const dragIdx=useRef(null);
-  const onDragStart=i=>{dragIdx.current=i;};
-  const onDrop=i=>{if(dragIdx.current===null||dragIdx.current===i)return;const arr=[...items];const[m]=arr.splice(dragIdx.current,1);arr.splice(i,0,m);setItems(arr);dragIdx.current=null;};
-  return{onDragStart,onDrop};
-}
+function useDragList(items,setItems){const dragIdx=useRef(null);const onDragStart=i=>{dragIdx.current=i;};const onDrop=i=>{if(dragIdx.current===null||dragIdx.current===i)return;const arr=[...items];const[m]=arr.splice(dragIdx.current,1);arr.splice(i,0,m);setItems(arr);dragIdx.current=null;};return{onDragStart,onDrop};}
 
-const StarIcon=()=><svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M6 1l1.2 3.6H11L8.1 6.8l1.1 3.6L6 8.2l-3.2 2.2 1.1-3.6L1 4.6h3.8z" fill="#c9a84c"/></svg>;
-const Checkmark=()=><svg width="11" height="8" viewBox="0 0 11 8" fill="none"><polyline points="1,4 4,7 10,1" stroke="#1a1208" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>;
-// Droplet icon for cycle
-const Droplet=({size=16,filled=false,color="#c9a84c"})=><svg width={size} height={size} viewBox="0 0 16 16" fill="none"><path d="M8 2C8 2 3 7.5 3 10.5a5 5 0 0 0 10 0C13 7.5 8 2 8 2z" stroke={color} strokeWidth="1.4" fill={filled?color:"none"} opacity={filled?0.9:1}/></svg>;
-
+// ── Shared UI components ──
 function CheckBox({done,onToggle,C}){
-  return(
-    <div onClick={e=>{e.stopPropagation();onToggle();}} style={{width:22,height:22,borderRadius:6,border:`1.5px solid ${done?"#c9a84c":C.border}`,background:done?"#c9a84c":"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,cursor:"pointer",transition:"all .15s"}}>
-      {done&&<Checkmark/>}
-    </div>
-  );
+  return <div onClick={e=>{e.stopPropagation();onToggle();}} style={{width:22,height:22,borderRadius:6,border:`1.5px solid ${done?"#c9a84c":C.border}`,background:done?"#c9a84c":"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,cursor:"pointer",transition:"all .15s"}}>
+    {done&&<SvgIcon name="check" size={11} color="#1a1208"/>}
+  </div>;
 }
-function Bar({pct,color,C,h=5}){
-  return(
-    <div style={{background:C.border,borderRadius:999,height:h,overflow:"hidden",flex:1}}>
-      <div style={{width:`${Math.min(100,pct)}%`,background:color,height:"100%",borderRadius:999,transition:"width .4s"}}/>
-    </div>
-  );
-}
-function SectionCard({title,children,C}){
-  return(
-    <div style={{marginBottom:12}}>
-      <div style={{fontSize:9,fontWeight:700,color:C.gold,textTransform:"uppercase",letterSpacing:2,marginBottom:6,paddingLeft:2}}>{title}</div>
-      <div style={{background:C.card,borderRadius:14,border:`1px solid ${C.border}`,overflow:"hidden"}}>{children}</div>
-    </div>
-  );
-}
-function Confetti({trigger}){
-  const ref=useRef(null);
-  useEffect(()=>{if(!trigger)return;const canvas=ref.current;if(!canvas)return;const ctx=canvas.getContext("2d");canvas.width=canvas.offsetWidth;canvas.height=canvas.offsetHeight;const pieces=Array.from({length:20},()=>({x:canvas.width*0.3+Math.random()*canvas.width*0.4,y:canvas.height*0.2+Math.random()*canvas.height*0.3,r:1.5+Math.random()*2,dx:(Math.random()-0.5)*2,dy:-1-Math.random()*2,alpha:1,gravity:0.05,color:["#c9a84c","#b8965a","#d4b896","#a09070","#e8d8b8"][Math.floor(Math.random()*5)]}));let raf;const draw=()=>{ctx.clearRect(0,0,canvas.width,canvas.height);let alive=false;pieces.forEach(p=>{p.x+=p.dx;p.y+=p.dy;p.dy+=p.gravity;p.alpha-=0.022;if(p.alpha>0){alive=true;ctx.globalAlpha=p.alpha;ctx.fillStyle=p.color;ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,Math.PI*2);ctx.fill();}});ctx.globalAlpha=1;if(alive)raf=requestAnimationFrame(draw);else ctx.clearRect(0,0,canvas.width,canvas.height);};draw();return()=>cancelAnimationFrame(raf);},[trigger]);
-  return React.createElement('canvas',{ref,style:{position:"absolute",inset:0,width:"100%",height:"100%",pointerEvents:"none",borderRadius:"inherit",zIndex:10}});
-}
-function Modal({title,onClose,children,C}){
-  return(
-    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",zIndex:1000,display:"flex",alignItems:"flex-end",justifyContent:"center"}} onClick={onClose}>
-      <div style={{background:C.card,borderRadius:"24px 24px 0 0",width:"100%",maxWidth:600,maxHeight:"92vh",overflowY:"auto",padding:"24px 20px 32px",border:`1px solid ${C.border}`}} onClick={e=>e.stopPropagation()}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
-          <span style={{fontWeight:700,fontSize:16,color:C.gold}}>{title}</span>
-          <button onClick={onClose} style={{background:C.border,border:"none",borderRadius:10,width:30,height:30,cursor:"pointer",fontSize:15,color:C.muted}}>✕</button>
-        </div>
-        {children}
-      </div>
-    </div>
-  );
-}
+function Bar({pct,color,C,h=5}){return <div style={{background:C.border,borderRadius:999,height:h,overflow:"hidden",flex:1}}><div style={{width:`${Math.min(100,pct)}%`,background:color,height:"100%",borderRadius:999,transition:"width .4s"}}/></div>;}
+function SectionCard({title,children,C}){return <div style={{marginBottom:12}}><div style={{fontSize:9,fontWeight:700,color:C.gold,textTransform:"uppercase",letterSpacing:2,marginBottom:6,paddingLeft:2}}>{title}</div><div style={{background:C.card,borderRadius:14,border:`1px solid ${C.border}`,overflow:"hidden"}}>{children}</div></div>;}
+function Confetti({trigger}){const ref=useRef(null);useEffect(()=>{if(!trigger)return;const canvas=ref.current;if(!canvas)return;const ctx=canvas.getContext("2d");canvas.width=canvas.offsetWidth;canvas.height=canvas.offsetHeight;const pieces=Array.from({length:20},()=>({x:canvas.width*0.3+Math.random()*canvas.width*0.4,y:canvas.height*0.2+Math.random()*canvas.height*0.3,r:1.5+Math.random()*2,dx:(Math.random()-0.5)*2,dy:-1-Math.random()*2,alpha:1,gravity:0.05,color:["#c9a84c","#b8965a","#d4b896","#a09070","#e8d8b8"][Math.floor(Math.random()*5)]}));let raf;const draw=()=>{ctx.clearRect(0,0,canvas.width,canvas.height);let alive=false;pieces.forEach(p=>{p.x+=p.dx;p.y+=p.dy;p.dy+=p.gravity;p.alpha-=0.022;if(p.alpha>0){alive=true;ctx.globalAlpha=p.alpha;ctx.fillStyle=p.color;ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,Math.PI*2);ctx.fill();}});ctx.globalAlpha=1;if(alive)raf=requestAnimationFrame(draw);else ctx.clearRect(0,0,canvas.width,canvas.height);};draw();return()=>cancelAnimationFrame(raf);},[trigger]);return React.createElement('canvas',{ref,style:{position:"absolute",inset:0,width:"100%",height:"100%",pointerEvents:"none",borderRadius:"inherit",zIndex:10}});}
+function Modal({title,onClose,children,C}){return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",zIndex:1000,display:"flex",alignItems:"flex-end",justifyContent:"center"}} onClick={onClose}><div style={{background:C.card,borderRadius:"24px 24px 0 0",width:"100%",maxWidth:600,maxHeight:"92vh",overflowY:"auto",padding:"24px 20px 32px",border:`1px solid ${C.border}`}} onClick={e=>e.stopPropagation()}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}><span style={{fontWeight:700,fontSize:16,color:C.gold}}>{title}</span><button onClick={onClose} style={{background:C.border,border:"none",borderRadius:10,width:30,height:30,cursor:"pointer",fontSize:15,color:C.muted}}>✕</button></div>{children}</div></div>;}
 
 function TaskForm({initial,onSave,onCancel,C}){
   const[f,setF]=useState({text:"",note:"",date:"",timeFrom:"",timeTo:"",colorId:"other",repeat:"none",days:[],...(initial||{})});
   const upd=k=>e=>setF(x=>({...x,[k]:e.target.value}));
-  const toggleDay=d=>setF(x=>({...x,days:x.days.includes(d)?x.days.filter(v=>v!==d):[...x.days,d]}));
   const si={width:"100%",border:`1px solid ${C.border}`,borderRadius:10,padding:"8px 10px",fontSize:13,marginBottom:8,boxSizing:"border-box",background:C.card,color:C.text,outline:"none"};
-  return(
-    <div style={{background:C.accentLight,borderRadius:16,padding:14,marginBottom:12}}>
-      <input type="text" value={f.text} onChange={upd("text")} placeholder="Názov úlohy" style={si}/>
-      <input type="text" value={f.note} onChange={upd("note")} placeholder="Poznámka" style={si}/>
-      <input type="date" value={f.date} onChange={upd("date")} style={si}/>
-      <div style={{display:"flex",gap:8,marginBottom:8}}>
-        <input type="time" value={f.timeFrom} onChange={upd("timeFrom")} style={{flex:1,border:`1px solid ${C.border}`,borderRadius:10,padding:"8px 10px",fontSize:13,background:C.card,color:C.text,outline:"none"}}/>
-        <input type="time" value={f.timeTo} onChange={upd("timeTo")} style={{flex:1,border:`1px solid ${C.border}`,borderRadius:10,padding:"8px 10px",fontSize:13,background:C.card,color:C.text,outline:"none"}}/>
-      </div>
-      <div style={{fontSize:10,color:C.muted,marginBottom:6,letterSpacing:1,textTransform:"uppercase"}}>Opakovanie</div>
-      <div style={{display:"flex",gap:5,marginBottom:8,flexWrap:"wrap"}}>
-        {[["none","Raz"],["daily","Každý deň"],["weekly","Každý týždeň"],["custom","Vybrané dni"]].map(([k,v])=>(
-          <button key={k} onClick={()=>setF(x=>({...x,repeat:k}))} style={{padding:"4px 10px",borderRadius:999,border:"none",cursor:"pointer",fontSize:11,fontWeight:700,background:f.repeat===k?"#c9a84c":C.card,color:f.repeat===k?"#1a1208":C.muted}}>{v}</button>
-        ))}
-      </div>
-      {f.repeat==="custom"&&<div style={{display:"flex",gap:5,marginBottom:8,flexWrap:"wrap"}}>{DOW_LABELS.map((d,i)=><button key={i} onClick={()=>toggleDay(i)} style={{width:32,height:32,borderRadius:8,border:"none",cursor:"pointer",fontSize:11,fontWeight:700,background:f.days.includes(i)?"#c9a84c":C.card,color:f.days.includes(i)?"#1a1208":C.muted}}>{d}</button>)}</div>}
-      <div style={{fontSize:10,color:C.muted,marginBottom:6,letterSpacing:1,textTransform:"uppercase"}}>Kategória</div>
-      <div style={{display:"flex",gap:6,marginBottom:12,flexWrap:"wrap"}}>
-        {TASK_CATS.map(tc=>(
-          <div key={tc.id} onClick={()=>setF(x=>({...x,colorId:tc.id}))} title={tc.label} style={{width:36,height:36,borderRadius:10,border:`1.5px solid ${f.colorId===tc.id?tc.color:C.border}`,cursor:"pointer",background:f.colorId===tc.id?C.accentLight:"transparent",display:"flex",alignItems:"center",justifyContent:"center"}}>
-            <CatIcon id={tc.id} size={16}/>
-          </div>
-        ))}
-      </div>
-      <div style={{display:"flex",gap:8}}>
-        <button onClick={()=>f.text.trim()&&onSave(f)} style={{flex:1,background:"#c9a84c",border:"none",borderRadius:10,padding:"9px",color:"#1a1208",fontWeight:700,fontSize:13,cursor:"pointer"}}>Uložiť</button>
-        <button onClick={onCancel} style={{background:C.border,border:"none",borderRadius:10,padding:"9px 14px",cursor:"pointer",color:C.muted,fontWeight:600}}>Zrušiť</button>
-      </div>
+  return <div style={{background:C.accentLight,borderRadius:16,padding:14,marginBottom:12}}>
+    <input type="text" value={f.text} onChange={upd("text")} placeholder="Názov úlohy" style={si}/>
+    <input type="text" value={f.note} onChange={upd("note")} placeholder="Poznámka" style={si}/>
+    <input type="date" value={f.date} onChange={upd("date")} style={si}/>
+    <div style={{display:"flex",gap:8,marginBottom:8}}>
+      <input type="time" value={f.timeFrom} onChange={upd("timeFrom")} style={{flex:1,border:`1px solid ${C.border}`,borderRadius:10,padding:"8px 10px",fontSize:13,background:C.card,color:C.text,outline:"none"}}/>
+      <input type="time" value={f.timeTo} onChange={upd("timeTo")} style={{flex:1,border:`1px solid ${C.border}`,borderRadius:10,padding:"8px 10px",fontSize:13,background:C.card,color:C.text,outline:"none"}}/>
     </div>
-  );
+    <div style={{fontSize:10,color:C.muted,marginBottom:6,letterSpacing:1,textTransform:"uppercase"}}>Opakovanie</div>
+    <div style={{display:"flex",gap:5,marginBottom:8,flexWrap:"wrap"}}>
+      {[["none","Raz"],["daily","Denne"],["weekly","Týžd."],["custom","Vlastné"]].map(([k,v])=><button key={k} onClick={()=>setF(x=>({...x,repeat:k}))} style={{padding:"4px 10px",borderRadius:999,border:"none",cursor:"pointer",fontSize:11,fontWeight:700,background:f.repeat===k?"#c9a84c":C.card,color:f.repeat===k?"#1a1208":C.muted}}>{v}</button>)}
+    </div>
+    {f.repeat==="custom"&&<div style={{display:"flex",gap:5,marginBottom:8,flexWrap:"wrap"}}>{DOW_LABELS.map((d,i)=><button key={i} onClick={()=>setF(x=>({...x,days:x.days.includes(i)?x.days.filter(v=>v!==i):[...x.days,i]}))} style={{width:32,height:32,borderRadius:8,border:"none",cursor:"pointer",fontSize:11,fontWeight:700,background:f.days.includes(i)?"#c9a84c":C.card,color:f.days.includes(i)?"#1a1208":C.muted}}>{d}</button>)}</div>}
+    <div style={{fontSize:10,color:C.muted,marginBottom:6,letterSpacing:1,textTransform:"uppercase"}}>Kategória</div>
+    <div style={{display:"flex",gap:6,marginBottom:12,flexWrap:"wrap"}}>
+      {TASK_CATS.map(tc=><div key={tc.id} onClick={()=>setF(x=>({...x,colorId:tc.id}))} title={tc.label} style={{width:36,height:36,borderRadius:10,border:`1.5px solid ${f.colorId===tc.id?tc.color:C.border}`,cursor:"pointer",background:f.colorId===tc.id?C.accentLight:"transparent",display:"flex",alignItems:"center",justifyContent:"center"}}><CatIcon id={tc.id} size={16}/></div>)}
+    </div>
+    <div style={{display:"flex",gap:8}}>
+      <button onClick={()=>f.text.trim()&&onSave(f)} style={{flex:1,background:"#c9a84c",border:"none",borderRadius:10,padding:"9px",color:"#1a1208",fontWeight:700,fontSize:13,cursor:"pointer"}}>Uložiť</button>
+      <button onClick={onCancel} style={{background:C.border,border:"none",borderRadius:10,padding:"9px 14px",cursor:"pointer",color:C.muted,fontWeight:600}}>Zrušiť</button>
+    </div>
+  </div>;
 }
 
 function SmokeHeader({dateLabel,todayName,quote,dark,setDark,C}){
-  const hbg=dark?"linear-gradient(160deg,#1e1a14,#17140f)":"linear-gradient(160deg,#f0e8d8,#e8dcc8 40%,#f0ead8)";
-  return(
-    <div style={{position:"relative",overflow:"hidden",padding:"clamp(20px,5vw,36px) clamp(16px,5vw,24px) clamp(40px,8vw,56px)",textAlign:"center",background:hbg}}>
-      <svg style={{position:"absolute",top:0,left:0,width:"100%",height:"100%",pointerEvents:"none"}} viewBox="0 0 480 160" preserveAspectRatio="xMidYMid slice">
-        <defs><filter id="b1"><feGaussianBlur stdDeviation="12"/></filter><filter id="b2"><feGaussianBlur stdDeviation="18"/></filter></defs>
-        {dark?<><ellipse cx="80" cy="90" rx="120" ry="55" fill="#2a2010" opacity="0.6" filter="url(#b2)"/><ellipse cx="400" cy="70" rx="130" ry="50" fill="#201808" opacity="0.5" filter="url(#b2)"/><ellipse cx="60" cy="50" rx="80" ry="30" fill="#221a0a" opacity="0.7" filter="url(#b1)"/></>
-        :<><ellipse cx="80" cy="90" rx="120" ry="55" fill="#d4c4a8" opacity="0.35" filter="url(#b2)"/><ellipse cx="400" cy="70" rx="130" ry="50" fill="#c8b898" opacity="0.30" filter="url(#b2)"/><ellipse cx="60" cy="50" rx="80" ry="30" fill="#e8dcc8" opacity="0.55" filter="url(#b1)"/><ellipse cx="320" cy="40" rx="110" ry="28" fill="#e8dcc8" opacity="0.48" filter="url(#b1)"/></>}
-        <line x1="0" y1="158" x2="480" y2="158" stroke="#c9a84c" strokeWidth="0.5" opacity="0.4"/>
-      </svg>
-      <div onClick={()=>setDark(d=>!d)} style={{position:"absolute",top:14,right:14,zIndex:10,background:dark?"#2a2318":"#e8dcc8",border:`1px solid ${C.border}`,borderRadius:20,width:36,height:20,cursor:"pointer",display:"flex",alignItems:"center",padding:"2px"}}>
-        <div style={{width:16,height:16,borderRadius:"50%",background:"#c9a84c",transform:dark?"translateX(16px)":"translateX(0)",transition:"transform .3s"}}/>
-      </div>
-      <div style={{position:"relative",fontSize:"clamp(9px,2.5vw,11px)",fontWeight:700,color:dark?"#7a6a50":"#a08858",textTransform:"uppercase",letterSpacing:3,marginBottom:14}}>
-        {dateLabel}{todayName&&<span style={{marginLeft:8,color:C.gold}}>· {todayName}</span>}
-      </div>
-      <div style={{position:"relative",fontFamily:"Georgia,serif",fontStyle:"italic",fontSize:"clamp(16px,4.5vw,21px)",color:dark?"#e8dcc8":"#3a2e1e",lineHeight:1.7,maxWidth:340,margin:"0 auto"}}>{quote.text}</div>
-      <div style={{position:"relative",marginTop:10,fontSize:11,fontWeight:600,color:C.gold,letterSpacing:2}}>— {quote.author}</div>
-      <div style={{position:"relative",marginTop:4,fontSize:9,color:dark?"#5a4a30":"#b09870",letterSpacing:3,textTransform:"uppercase"}}>Stoický výrok dňa</div>
+  return <div style={{position:"relative",overflow:"hidden",padding:"clamp(20px,5vw,36px) clamp(16px,5vw,24px) clamp(40px,8vw,56px)",textAlign:"center",background:dark?"linear-gradient(160deg,#1e1a14,#17140f)":"linear-gradient(160deg,#f0e8d8,#e8dcc8 40%,#f0ead8)"}}>
+    <svg style={{position:"absolute",top:0,left:0,width:"100%",height:"100%",pointerEvents:"none"}} viewBox="0 0 480 160" preserveAspectRatio="xMidYMid slice">
+      <defs><filter id="b1"><feGaussianBlur stdDeviation="12"/></filter><filter id="b2"><feGaussianBlur stdDeviation="18"/></filter></defs>
+      {dark?<><ellipse cx="80" cy="90" rx="120" ry="55" fill="#2a2010" opacity="0.6" filter="url(#b2)"/><ellipse cx="400" cy="70" rx="130" ry="50" fill="#201808" opacity="0.5" filter="url(#b2)"/><ellipse cx="60" cy="50" rx="80" ry="30" fill="#221a0a" opacity="0.7" filter="url(#b1)"/></>
+      :<><ellipse cx="80" cy="90" rx="120" ry="55" fill="#d4c4a8" opacity="0.35" filter="url(#b2)"/><ellipse cx="400" cy="70" rx="130" ry="50" fill="#c8b898" opacity="0.30" filter="url(#b2)"/><ellipse cx="60" cy="50" rx="80" ry="30" fill="#e8dcc8" opacity="0.55" filter="url(#b1)"/><ellipse cx="320" cy="40" rx="110" ry="28" fill="#e8dcc8" opacity="0.48" filter="url(#b1)"/></>}
+      <line x1="0" y1="158" x2="480" y2="158" stroke="#c9a84c" strokeWidth="0.5" opacity="0.4"/>
+    </svg>
+    <div onClick={()=>setDark(d=>!d)} style={{position:"absolute",top:14,right:14,zIndex:10,background:dark?"#2a2318":"#e8dcc8",border:`1px solid ${C.border}`,borderRadius:20,width:36,height:20,cursor:"pointer",display:"flex",alignItems:"center",padding:"2px"}}>
+      <div style={{width:16,height:16,borderRadius:"50%",background:"#c9a84c",transform:dark?"translateX(16px)":"translateX(0)",transition:"transform .3s"}}/>
     </div>
-  );
+    <div style={{position:"relative",fontSize:"clamp(9px,2.5vw,11px)",fontWeight:700,color:dark?"#7a6a50":"#a08858",textTransform:"uppercase",letterSpacing:3,marginBottom:14}}>
+      {dateLabel}{todayName&&<span style={{marginLeft:8,color:C.gold}}>· {todayName}</span>}
+    </div>
+    <div style={{position:"relative",fontFamily:"Georgia,serif",fontStyle:"italic",fontSize:"clamp(16px,4.5vw,21px)",color:dark?"#e8dcc8":"#3a2e1e",lineHeight:1.7,maxWidth:340,margin:"0 auto"}}>{quote.text}</div>
+    <div style={{position:"relative",marginTop:10,fontSize:11,fontWeight:600,color:C.gold,letterSpacing:2}}>— {quote.author}</div>
+    <div style={{position:"relative",marginTop:4,fontSize:9,color:dark?"#5a4a30":"#b09870",letterSpacing:3,textTransform:"uppercase"}}>Stoický výrok dňa</div>
+  </div>;
 }
 
-function DayDetail({date,onClose,C}){
+// ── Mood picker ──
+function MoodDot({moodId,moods,size=10}){
+  const m=moods.find(x=>x.id===moodId);
+  if(!m)return null;
+  return <div style={{width:size,height:size,borderRadius:"50%",background:"#c9a84c",opacity:m.opacity,flexShrink:0}}/>;
+}
+
+// ── Monthly summary modal ──
+function MonthlySummary({month,year,onClose,C,tasks,habits,challenges,moods,moodLog}){
+  const dim=daysInMonth(year,month);
+  const monthStart=toISO(new Date(year,month,1));
+  const monthEnd=toISO(new Date(year,month,dim));
+  const monthDays=Array.from({length:dim},(_,i)=>toISO(new Date(year,month,i+1)));
+  // Habits
+  let hTotal=0,hDone=0;
+  habits.forEach(h=>monthDays.forEach(d=>{hTotal++;if(h.checks&&h.checks[d])hDone++;}));
+  // Tasks
+  const mTasks=tasks.filter(t=>t.date&&t.date>=monthStart&&t.date<=monthEnd);
+  const mTasksDone=mTasks.filter(t=>t.done).length;
+  // Challenges
+  const monthWeeks=[];const cur=new Date(monthStart);cur.setDate(cur.getDate()-monOffset(cur.getDay()));
+  while(toISO(cur)<=monthEnd){monthWeeks.push(toISO(new Date(cur)));cur.setDate(cur.getDate()+7);}
+  const mChallenges=challenges.filter(c=>monthWeeks.includes(c.week));
+  const mCDone=mChallenges.filter(c=>{const days=Array.from({length:7},(_,i)=>{const d=new Date(c.week+"T12:00");d.setDate(d.getDate()+i);return toISO(d);});return days.filter(d=>c.doneMap&&c.doneMap[d]).length>=(c.target||7);}).length;
+  // Mood
+  const moodCounts={};moods.forEach(m=>{moodCounts[m.id]=monthDays.filter(d=>moodLog[d]===m.id).length;});
+  const topMood=moods.find(m=>moodCounts[m.id]===Math.max(...Object.values(moodCounts)));
+  const hPct=hTotal?Math.round(hDone/hTotal*100):0;
+  return <Modal title={`Zhrnutie — ${SK_MONTHS[month]} ${year}`} onClose={onClose} C={C}>
+    <div style={{display:"flex",flexDirection:"column",gap:14}}>
+      {[["Návyky",hDone,hTotal,C.gold],["Úlohy",mTasksDone,mTasks.length,C.accent],["Výzvy",mCDone,mChallenges.length,C.lav]].map(([l,d,t,col])=>t>0&&(
+        <div key={l}>
+          <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}><span style={{fontSize:13,color:C.text,fontWeight:500}}>{l}</span><span style={{fontSize:13,fontWeight:700,color:col}}>{d}/{t} · {t?Math.round(d/t*100):0}%</span></div>
+          <Bar pct={t?Math.round(d/t*100):0} color={col} C={C}/>
+        </div>
+      ))}
+      {topMood&&Object.values(moodCounts).some(v=>v>0)&&<div style={{background:C.accentLight,borderRadius:12,padding:"12px 14px",border:`1px solid ${C.border}`}}>
+        <div style={{fontSize:9,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Nálada mesiaca</div>
+        <div style={{display:"flex",alignItems:"center",gap:10}}>
+          <div style={{width:28,height:28,borderRadius:"50%",background:"#c9a84c",opacity:topMood.opacity,flexShrink:0}}/>
+          <span style={{fontSize:14,fontWeight:600,color:C.text}}>{topMood.label}</span>
+          <span style={{fontSize:11,color:C.muted,marginLeft:"auto"}}>{moodCounts[topMood.id]}× dni</span>
+        </div>
+      </div>}
+      <div style={{background:C.accentLight,borderRadius:12,padding:"12px 14px",border:`1px solid ${C.border}`}}>
+        <div style={{fontSize:9,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>Celkové skóre</div>
+        <div style={{fontSize:32,fontWeight:700,color:C.gold,marginBottom:2}}>{hPct}<span style={{fontSize:16,fontWeight:400}}>%</span></div>
+        <div style={{fontSize:11,color:C.muted}}>{hPct>=80?"Výborný mesiac! Tak ďalej.":hPct>=60?"Dobrý mesiac, stále je priestor.":"Nevadí, nový mesiac je nová šanca."}</div>
+      </div>
+    </div>
+  </Modal>;
+}
+
+function DayDetail({date,onClose,C,moodLog,setMoodLog,moods,journalEntries,setJournalEntries}){
   const[tasks,setTasks]=useStorage("tasks",[]);
   const[habits,setHabits]=useStorage("habits",[]);
   const[challenges,setChallenges]=useStorage("challenges",[]);
   const[showAddTask,setShowAddTask]=useState(false);
   const[confetti,setConfetti]=useState(0);
+  const[journalText,setJournalText]=useState(()=>journalEntries[date]||"");
   const d=new Date(date+"T12:00");
   const key=`${d.getMonth()+1}-${d.getDate()}`;
   const label=`${SK_DAYS_LONG[d.getDay()]} ${d.getDate()}. ${SK_MONTHS[d.getMonth()]} ${d.getFullYear()}`;
   const holiday=SK_HOLIDAYS[key]||"",nameDay=SK_NAMES[key]||"";
   const dayTasks=tasks.filter(t=>taskDueOn(t,date));
-  const dayHabits=habits.filter(h=>habitDueOn(h,date));
+  const dayHabits=habits.filter(h=>habitDoneOn(h,date)||habitDueToday(h,date));
   const ws=weekMonday(date);
   const dayChallenges=challenges.filter(c=>c.week===ws);
+  const currentMood=moodLog[date];
   const toggleTask=id=>{setTasks(ts=>ts.map(t=>{if(t.id!==id)return t;if(t.repeat&&t.repeat!=="none"){const dm={...(t.doneMap||{})};dm[date]=!dm[date];return{...t,doneMap:dm};}return{...t,done:!t.done};}));setConfetti(x=>x+1);};
   const toggleHabit=id=>{setHabits(hs=>hs.map(h=>{if(h.id!==id)return h;const checks={...(h.checks||{})};checks[date]=!checks[date];return{...h,checks};}));setConfetti(x=>x+1);};
-  const toggleChallenge=(id)=>{setChallenges(cs=>cs.map(c=>{if(c.id!==id)return c;const dm={...(c.doneMap||{})};dm[date]=!dm[date];return{...c,doneMap:dm};}));setConfetti(x=>x+1);};
+  const toggleChallenge=id=>{setChallenges(cs=>cs.map(c=>{if(c.id!==id)return c;const dm={...(c.doneMap||{})};dm[date]=!dm[date];return{...c,doneMap:dm};}));setConfetti(x=>x+1);};
   const addTask=f=>{setTasks(t=>[...t,{id:Date.now(),...f,text:f.text.trim(),done:false,doneMap:{}}]);setShowAddTask(false);};
-  return(
-    <Modal title={label} onClose={onClose} C={C}>
-      <div style={{position:"relative"}}>
-        <Confetti trigger={confetti}/>
-        {(holiday||nameDay)&&<div style={{background:C.accentLight,borderRadius:10,padding:"8px 12px",marginBottom:14,fontSize:12,color:C.accent}}>{holiday&&<div>Sviatok: <b>{holiday}</b></div>}{nameDay&&<div>Meniny: <b style={{color:C.gold}}>{nameDay}</b></div>}</div>}
-        {dayTasks.length>0&&<SectionCard title="Úlohy" C={C}>{dayTasks.map((t,i)=>{const done=isTaskDoneFn(t,date);return<div key={t.id} style={{display:"flex",alignItems:"center",gap:12,padding:"11px 14px",borderBottom:i<dayTasks.length-1?`1px solid ${C.sepLine}`:"none",cursor:"pointer"}} onClick={()=>toggleTask(t.id)}><CatIcon id={t.colorId} opacity={done?0.4:1}/><CheckBox done={done} onToggle={()=>toggleTask(t.id)} C={C}/><div style={{flex:1}}><div style={{fontSize:13,textDecoration:done?"line-through":"none",color:done?C.muted:C.text}}>{t.text}</div>{(t.timeFrom||t.timeTo)&&<div style={{fontSize:10,color:C.muted}}>{t.timeFrom}{t.timeTo?` – ${t.timeTo}`:""}</div>}</div></div>;})}
-        </SectionCard>}
-        {showAddTask?<TaskForm onSave={addTask} onCancel={()=>setShowAddTask(false)} C={C}/>:<button onClick={()=>setShowAddTask(true)} style={{width:"100%",background:"transparent",border:`1px dashed ${C.border}`,borderRadius:10,padding:"8px",cursor:"pointer",color:C.gold,fontSize:12,fontWeight:600,marginBottom:12}}>+ Pridať úlohu</button>}
-        {dayHabits.length>0&&<SectionCard title="Návyky" C={C}>{dayHabits.map((h,i)=>{const done=habitDoneOn(h,date);return<div key={h.id} style={{display:"flex",alignItems:"center",gap:12,padding:"11px 14px",borderBottom:i<dayHabits.length-1?`1px solid ${C.sepLine}`:"none",cursor:"pointer",background:done?C.accentLight:"transparent"}} onClick={()=>toggleHabit(h.id)}><CheckBox done={done} onToggle={()=>toggleHabit(h.id)} C={C}/><span style={{fontSize:13,flex:1,color:done?C.muted:C.text,textDecoration:done?"line-through":"none"}}>{h.name}</span></div>;})}
-        </SectionCard>}
-        {dayChallenges.length>0&&<SectionCard title="Výzvy" C={C}>{dayChallenges.map((c,i)=>{const done=!!(c.doneMap&&c.doneMap[date]);return<div key={c.id} style={{display:"flex",alignItems:"center",gap:12,padding:"11px 14px",borderBottom:i<dayChallenges.length-1?`1px solid ${C.sepLine}`:"none",cursor:"pointer",background:done?C.lavLight:"transparent"}} onClick={()=>toggleChallenge(c.id)}><CheckBox done={done} onToggle={()=>toggleChallenge(c.id)} C={C}/><span style={{fontSize:13,flex:1,textDecoration:done?"line-through":"none",color:done?C.muted:C.text}}>{c.text}</span></div>;})}
-        </SectionCard>}
+  const saveJournal=()=>setJournalEntries(e=>({...e,[date]:journalText}));
+  return <Modal title={label} onClose={onClose} C={C}>
+    <div style={{position:"relative"}}>
+      <Confetti trigger={confetti}/>
+      {(holiday||nameDay)&&<div style={{background:C.accentLight,borderRadius:10,padding:"8px 12px",marginBottom:14,fontSize:12,color:C.accent}}>{holiday&&<div>Sviatok: <b>{holiday}</b></div>}{nameDay&&<div>Meniny: <b style={{color:C.gold}}>{nameDay}</b></div>}</div>}
+      {/* Nálada */}
+      <div style={{marginBottom:16}}>
+        <div style={{fontSize:9,fontWeight:700,color:C.gold,textTransform:"uppercase",letterSpacing:2,marginBottom:8}}>Nálada</div>
+        <div style={{display:"flex",gap:8,alignItems:"center"}}>
+          {moods.map(m=>(
+            <div key={m.id} onClick={()=>setMoodLog(ml=>({...ml,[date]:ml[date]===m.id?null:m.id}))}
+              style={{flex:1,height:32,borderRadius:8,background:currentMood===m.id?"#c9a84c":C.accentLight,border:`1.5px solid ${currentMood===m.id?"#c9a84c":C.border}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",opacity:m.opacity+(currentMood===m.id?0:0),transition:"all .15s"}}>
+              <div style={{width:10,height:10,borderRadius:"50%",background:currentMood===m.id?"#1a1208":"#c9a84c",opacity:m.opacity}}/>
+            </div>
+          ))}
+        </div>
+        {currentMood&&<div style={{fontSize:10,color:C.muted,marginTop:5,textAlign:"center"}}>{moods.find(m=>m.id===currentMood)?.label}</div>}
       </div>
-    </Modal>
-  );
+      {/* Úlohy */}
+      {dayTasks.length>0&&<SectionCard title="Úlohy" C={C}>{dayTasks.map((t,i)=>{const done=isTaskDoneFn(t,date);return <div key={t.id} style={{display:"flex",alignItems:"center",gap:12,padding:"11px 14px",borderBottom:i<dayTasks.length-1?`1px solid ${C.sepLine}`:"none",cursor:"pointer"}} onClick={()=>toggleTask(t.id)}><CatIcon id={t.colorId} opacity={done?0.4:1}/><CheckBox done={done} onToggle={()=>toggleTask(t.id)} C={C}/><div style={{flex:1}}><div style={{fontSize:13,textDecoration:done?"line-through":"none",color:done?C.muted:C.text}}>{t.text}</div>{(t.timeFrom||t.timeTo)&&<div style={{fontSize:10,color:C.muted}}>{t.timeFrom}{t.timeTo?` – ${t.timeTo}`:""}</div>}</div></div>;})</SectionCard>}
+      {showAddTask?<TaskForm onSave={addTask} onCancel={()=>setShowAddTask(false)} C={C}/>:<button onClick={()=>setShowAddTask(true)} style={{width:"100%",background:"transparent",border:`1px dashed ${C.border}`,borderRadius:10,padding:"8px",cursor:"pointer",color:C.gold,fontSize:12,fontWeight:600,marginBottom:12}}>+ Pridať úlohu</button>}
+      {/* Návyky */}
+      {dayHabits.length>0&&<SectionCard title="Návyky" C={C}>{dayHabits.map((h,i)=>{const done=habitDoneOn(h,date);return <div key={h.id} style={{display:"flex",alignItems:"center",gap:12,padding:"11px 14px",borderBottom:i<dayHabits.length-1?`1px solid ${C.sepLine}`:"none",cursor:"pointer",background:done?C.accentLight:"transparent"}} onClick={()=>toggleHabit(h.id)}><CheckBox done={done} onToggle={()=>toggleHabit(h.id)} C={C}/><span style={{fontSize:13,flex:1,color:done?C.muted:C.text,textDecoration:done?"line-through":"none"}}>{h.name}</span></div>;})</SectionCard>}
+      {/* Výzvy */}
+      {dayChallenges.length>0&&<SectionCard title="Výzvy" C={C}>{dayChallenges.map((c,i)=>{const done=!!(c.doneMap&&c.doneMap[date]);return <div key={c.id} style={{display:"flex",alignItems:"center",gap:12,padding:"11px 14px",borderBottom:i<dayChallenges.length-1?`1px solid ${C.sepLine}`:"none",cursor:"pointer",background:done?C.lavLight:"transparent"}} onClick={()=>toggleChallenge(c.id)}><CheckBox done={done} onToggle={()=>toggleChallenge(c.id)} C={C}/><span style={{fontSize:13,flex:1,textDecoration:done?"line-through":"none",color:done?C.muted:C.text}}>{c.text}</span></div>;})</SectionCard>}
+      {/* Denník */}
+      <div style={{marginTop:4}}>
+        <div style={{fontSize:9,fontWeight:700,color:C.gold,textTransform:"uppercase",letterSpacing:2,marginBottom:8}}>Zápisník</div>
+        <textarea value={journalText} onChange={e=>setJournalText(e.target.value)} onBlur={saveJournal}
+          placeholder="Ako bol tento deň? Čo si cítila, čo sa podarilo..."
+          style={{width:"100%",minHeight:100,border:`1px solid ${C.border}`,borderRadius:12,padding:"10px 12px",fontSize:13,background:C.card,color:C.text,outline:"none",resize:"vertical",lineHeight:1.6,boxSizing:"border-box"}}/>
+        <button onClick={saveJournal} style={{marginTop:6,background:"#c9a84c",border:"none",borderRadius:10,padding:"8px 18px",color:"#1a1208",fontWeight:700,fontSize:13,cursor:"pointer"}}>Uložiť</button>
+      </div>
+    </div>
+  </Modal>;
 }
 
-function Calendar({C}){
+function Calendar({C,moodLog,moods}){
   const now=new Date();
   const[view,setView]=useState({y:now.getFullYear(),m:now.getMonth()});
   const[sel,setSel]=useState(null);
   const[tasks]=useStorage("tasks",[]);
+  const[moodLogS,setMoodLogS]=useStorage("mood_log",{});
+  const[journalEntries,setJournalEntries]=useStorage("journal",{});
+  const[showSummary,setShowSummary]=useState(false);
+  const[habits]=useStorage("habits",[]);
+  const[challenges]=useStorage("challenges",[]);
+
   const firstDow=new Date(view.y,view.m,1).getDay();
   const offset=monOffset(firstDow);
   const dim=new Date(view.y,view.m+1,0).getDate();
@@ -316,52 +323,51 @@ function Calendar({C}){
   const isToday=d=>d===now.getDate()&&view.m===now.getMonth()&&view.y===now.getFullYear();
   const weeks=[];let dayNum=1-offset;
   while(dayNum<=dim){const wk=[];for(let i=0;i<7;i++){wk.push(dayNum>=1&&dayNum<=dim?dayNum:null);dayNum++;}weeks.push(wk);}
-  return(
-    <div>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
-        <button onClick={()=>setView(v=>{const d=new Date(v.y,v.m-1,1);return{y:d.getFullYear(),m:d.getMonth()};})} style={{background:C.accentLight,border:"none",borderRadius:10,width:34,height:34,cursor:"pointer",fontSize:16,color:C.gold}}>‹</button>
-        <span style={{fontWeight:700,fontSize:14,color:C.gold,letterSpacing:1}}>{SK_MONTHS[view.m]} {view.y}</span>
-        <button onClick={()=>setView(v=>{const d=new Date(v.y,v.m+1,1);return{y:d.getFullYear(),m:d.getMonth()};})} style={{background:C.accentLight,border:"none",borderRadius:10,width:34,height:34,cursor:"pointer",fontSize:16,color:C.gold}}>›</button>
-      </div>
-      <div style={{display:"grid",gridTemplateColumns:"18px repeat(7,1fr)",gap:2,marginBottom:4}}>
-        <div/>
-        {SK_DAYS_SHORT.map((d,i)=><div key={i} style={{textAlign:"center",fontSize:9,fontWeight:700,color:i>=5?C.gold:C.muted,padding:"2px 0"}}>{d}</div>)}
-      </div>
-      {weeks.map((wk,wi)=>{
-        const firstReal=wk.find(d=>d!==null);
-        const wkNum=firstReal?getWeekNum(ds(firstReal)):"";
-        return(
-          <div key={wi} style={{display:"grid",gridTemplateColumns:"18px repeat(7,1fr)",gap:2,marginBottom:2}}>
-            <div style={{display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,color:C.border,fontWeight:600}}>{wkNum}</div>
-            {wk.map((d,di)=>{
-              if(!d)return<div key={di}/>;
-              const tod=isToday(d),hol=SK_HOLIDAYS[`${view.m+1}-${d}`];
-              const dayTasks=tasks.filter(t=>taskDueOn(t,ds(d)));
-              const doneCnt=dayTasks.filter(t=>isTaskDoneFn(t,ds(d))).length;
-              const totalCnt=dayTasks.length;
-              const pct=totalCnt?Math.round((doneCnt/totalCnt)*100):0;
-              return(
-                <div key={di} onClick={()=>setSel(ds(d))} style={{borderRadius:8,padding:"4px 3px 5px",cursor:"pointer",background:hol?C.accentLight:"transparent",border:tod?`2px solid #c9a84c`:"2px solid transparent",color:C.text,minHeight:48}}>
-                  <div style={{textAlign:"center",fontSize:12,fontWeight:tod?700:400,color:tod?C.gold:hol?C.gold:C.text,marginBottom:2}}>{d}</div>
-                  {totalCnt>0&&<>
-                    <div style={{fontSize:8,textAlign:"center",color:tod?C.gold:C.muted,marginBottom:2,fontWeight:600}}>{doneCnt}/{totalCnt}</div>
-                    <div style={{background:C.border,borderRadius:999,height:3,overflow:"hidden",margin:"0 2px"}}><div style={{width:`${pct}%`,background:"#c9a84c",height:"100%",borderRadius:999}}/></div>
-                  </>}
-                </div>
-              );
-            })}
-          </div>
-        );
-      })}
-      {sel&&sel!==todayStr()&&<DayDetail date={sel} onClose={()=>setSel(null)} C={C}/>}
+
+  return <div>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+      <button onClick={()=>setView(v=>{const d=new Date(v.y,v.m-1,1);return{y:d.getFullYear(),m:d.getMonth()};})} style={{background:C.accentLight,border:"none",borderRadius:10,width:34,height:34,cursor:"pointer",fontSize:16,color:C.gold}}>‹</button>
+      <button onClick={()=>setShowSummary(true)} style={{background:"transparent",border:"none",cursor:"pointer",fontWeight:700,fontSize:14,color:C.gold,letterSpacing:1}}>{SK_MONTHS[view.m]} {view.y}</button>
+      <button onClick={()=>setView(v=>{const d=new Date(v.y,v.m+1,1);return{y:d.getFullYear(),m:d.getMonth()};})} style={{background:C.accentLight,border:"none",borderRadius:10,width:34,height:34,cursor:"pointer",fontSize:16,color:C.gold}}>›</button>
     </div>
-  );
+    <div style={{display:"grid",gridTemplateColumns:"18px repeat(7,1fr)",gap:2,marginBottom:4}}>
+      <div/>{SK_DAYS_SHORT.map((d,i)=><div key={i} style={{textAlign:"center",fontSize:9,fontWeight:700,color:i>=5?C.gold:C.muted,padding:"2px 0"}}>{d}</div>)}
+    </div>
+    {weeks.map((wk,wi)=>{
+      const firstReal=wk.find(d=>d!==null);
+      const wkNum=firstReal?getWeekNum(ds(firstReal)):"";
+      return <div key={wi} style={{display:"grid",gridTemplateColumns:"18px repeat(7,1fr)",gap:2,marginBottom:2}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,color:C.border,fontWeight:600}}>{wkNum}</div>
+        {wk.map((d,di)=>{
+          if(!d)return <div key={di}/>;
+          const tod=isToday(d),hol=SK_HOLIDAYS[`${view.m+1}-${d}`];
+          const dayTasks=tasks.filter(t=>taskDueOn(t,ds(d)));
+          const doneCnt=dayTasks.filter(t=>isTaskDoneFn(t,ds(d))).length;
+          const totalCnt=dayTasks.length;
+          const pct=totalCnt?Math.round((doneCnt/totalCnt)*100):0;
+          const dayMood=moodLogS[ds(d)];
+          const moodObj=moods.find(m=>m.id===dayMood);
+          return <div key={di} onClick={()=>setSel(ds(d))} style={{borderRadius:8,padding:"3px 3px 4px",cursor:"pointer",background:hol?C.accentLight:"transparent",border:tod?`2px solid #c9a84c`:"2px solid transparent",color:C.text,minHeight:46}}>
+            <div style={{textAlign:"center",fontSize:12,fontWeight:tod?700:400,color:tod?C.gold:hol?C.gold:C.text,marginBottom:2}}>{d}</div>
+            {moodObj&&<div style={{width:6,height:6,borderRadius:"50%",background:"#c9a84c",opacity:moodObj.opacity,margin:"0 auto 2px"}}/>}
+            {totalCnt>0&&<>
+              <div style={{fontSize:8,textAlign:"center",color:tod?C.gold:C.muted,marginBottom:2,fontWeight:600}}>{doneCnt}/{totalCnt}</div>
+              <div style={{background:C.border,borderRadius:999,height:3,overflow:"hidden",margin:"0 2px"}}><div style={{width:`${pct}%`,background:"#c9a84c",height:"100%",borderRadius:999}}/></div>
+            </>}
+          </div>;
+        })}
+      </div>;
+    })}
+    {sel&&<DayDetail date={sel} onClose={()=>setSel(null)} C={C} moodLog={moodLogS} setMoodLog={setMoodLogS} moods={moods} journalEntries={journalEntries} setJournalEntries={setJournalEntries}/>}
+    {showSummary&&<MonthlySummary month={view.m} year={view.y} onClose={()=>setShowSummary(false)} C={C} tasks={tasks} habits={habits} challenges={challenges} moods={moods} moodLog={moodLogS}/>}
+  </div>;
 }
 
-function TodayPanel({C}){
+function TodayPanel({C,moods}){
   const[tasks,setTasks]=useStorage("tasks",[]);
   const[habits,setHabits]=useStorage("habits",[]);
   const[challenges,setChallenges]=useStorage("challenges",[]);
+  const[moodLog,setMoodLog]=useStorage("mood_log",{});
   const[confetti,setConfetti]=useState(0);
   const tod=todayStr(),now=new Date();
   const ws=weekMonday(tod);
@@ -374,22 +380,28 @@ function TodayPanel({C}){
   const doneAll=dayTasks.filter(t=>isTaskDoneFn(t,tod)).length+dayHabits.filter(h=>habitDoneOn(h,tod)).length+dayChallenges.filter(c=>c.doneMap&&c.doneMap[tod]).length;
   const totalAll=dayTasks.length+dayHabits.length+dayChallenges.length;
   const pct=totalAll?Math.round((doneAll/totalAll)*100):0;
-  if(totalAll===0)return null;
-  return(
-    <div style={{marginTop:16,position:"relative"}}>
-      <Confetti trigger={confetti}/>
-      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
-        <div style={{fontSize:9,fontWeight:700,color:C.gold,textTransform:"uppercase",letterSpacing:2}}>Dnes · {now.getDate()}. {SK_MONTHS[now.getMonth()]}</div>
-        <div style={{display:"flex",alignItems:"center",gap:8,flex:1,marginLeft:12}}><Bar pct={pct} color={C.gold} C={C}/><span style={{fontSize:12,fontWeight:700,color:C.gold,minWidth:32}}>{pct}%</span></div>
-      </div>
-      {dayTasks.length>0&&<SectionCard title="Úlohy" C={C}>{dayTasks.map((t,i)=>{const done=isTaskDoneFn(t,tod);return<div key={t.id} style={{display:"flex",alignItems:"center",gap:12,padding:"11px 14px",borderBottom:i<dayTasks.length-1?`1px solid ${C.sepLine}`:"none",cursor:"pointer"}} onClick={()=>toggleTask(t.id)}><CatIcon id={t.colorId} opacity={done?0.4:1}/><CheckBox done={done} onToggle={()=>toggleTask(t.id)} C={C}/><div style={{flex:1}}><div style={{fontSize:13,textDecoration:done?"line-through":"none",color:done?C.muted:C.text}}>{t.text}</div>{(t.timeFrom||t.timeTo)&&<div style={{fontSize:10,color:C.muted}}>{t.timeFrom}{t.timeTo?` – ${t.timeTo}`:""}</div>}</div></div>;})}
-      </SectionCard>}
-      {dayHabits.length>0&&<SectionCard title="Návyky" C={C}>{dayHabits.map((h,i)=>{const done=habitDoneOn(h,tod);return<div key={h.id} style={{display:"flex",alignItems:"center",gap:12,padding:"11px 14px",borderBottom:i<dayHabits.length-1?`1px solid ${C.sepLine}`:"none",cursor:"pointer",background:done?C.accentLight:"transparent"}} onClick={()=>toggleHabit(h.id)}><CheckBox done={done} onToggle={()=>toggleHabit(h.id)} C={C}/><span style={{fontSize:13,flex:1,color:done?C.muted:C.text,textDecoration:done?"line-through":"none"}}>{h.name}</span></div>;})}
-      </SectionCard>}
-      {dayChallenges.length>0&&<SectionCard title="Výzvy" C={C}>{dayChallenges.map((c,i)=>{const done=!!(c.doneMap&&c.doneMap[tod]);return<div key={c.id} style={{display:"flex",alignItems:"center",gap:12,padding:"11px 14px",borderBottom:i<dayChallenges.length-1?`1px solid ${C.sepLine}`:"none",cursor:"pointer",background:done?C.lavLight:"transparent"}} onClick={()=>toggleChallenge(c.id)}><CheckBox done={done} onToggle={()=>toggleChallenge(c.id)} C={C}/><span style={{fontSize:13,flex:1,textDecoration:done?"line-through":"none",color:done?C.muted:C.text}}>{c.text}</span></div>;})}
-      </SectionCard>}
+  const currentMood=moodLog[tod];
+  return <div style={{marginTop:16,position:"relative"}}>
+    <Confetti trigger={confetti}/>
+    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+      <div style={{fontSize:9,fontWeight:700,color:C.gold,textTransform:"uppercase",letterSpacing:2}}>Dnes · {now.getDate()}. {SK_MONTHS[now.getMonth()]}</div>
+      {totalAll>0&&<div style={{display:"flex",alignItems:"center",gap:8,flex:1,marginLeft:12}}><Bar pct={pct} color={C.gold} C={C}/><span style={{fontSize:12,fontWeight:700,color:C.gold,minWidth:32}}>{pct}%</span></div>}
     </div>
-  );
+    {/* Quick mood */}
+    <div style={{display:"flex",gap:6,marginBottom:14,alignItems:"center"}}>
+      <span style={{fontSize:10,color:C.muted,whiteSpace:"nowrap"}}>Nálada:</span>
+      {moods.map(m=>(
+        <div key={m.id} onClick={()=>setMoodLog(ml=>({...ml,[tod]:ml[tod]===m.id?null:m.id}))} title={m.label}
+          style={{flex:1,height:26,borderRadius:7,background:currentMood===m.id?"#c9a84c":C.accentLight,border:`1.5px solid ${currentMood===m.id?"#c9a84c":C.border}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",transition:"all .15s"}}>
+          <div style={{width:8,height:8,borderRadius:"50%",background:currentMood===m.id?"#1a1208":"#c9a84c",opacity:m.opacity}}/>
+        </div>
+      ))}
+      {currentMood&&<span style={{fontSize:10,color:C.gold,whiteSpace:"nowrap",fontWeight:600}}>{moods.find(m=>m.id===currentMood)?.label}</span>}
+    </div>
+    {dayTasks.length>0&&<SectionCard title="Úlohy" C={C}>{dayTasks.map((t,i)=>{const done=isTaskDoneFn(t,tod);return <div key={t.id} style={{display:"flex",alignItems:"center",gap:12,padding:"11px 14px",borderBottom:i<dayTasks.length-1?`1px solid ${C.sepLine}`:"none",cursor:"pointer"}} onClick={()=>toggleTask(t.id)}><CatIcon id={t.colorId} opacity={done?0.4:1}/><CheckBox done={done} onToggle={()=>toggleTask(t.id)} C={C}/><div style={{flex:1}}><div style={{fontSize:13,textDecoration:done?"line-through":"none",color:done?C.muted:C.text}}>{t.text}</div>{(t.timeFrom||t.timeTo)&&<div style={{fontSize:10,color:C.muted}}>{t.timeFrom}{t.timeTo?` – ${t.timeTo}`:""}</div>}</div></div>;})</SectionCard>}
+    {dayHabits.length>0&&<SectionCard title="Návyky" C={C}>{dayHabits.map((h,i)=>{const done=habitDoneOn(h,tod);return <div key={h.id} style={{display:"flex",alignItems:"center",gap:12,padding:"11px 14px",borderBottom:i<dayHabits.length-1?`1px solid ${C.sepLine}`:"none",cursor:"pointer",background:done?C.accentLight:"transparent"}} onClick={()=>toggleHabit(h.id)}><CheckBox done={done} onToggle={()=>toggleHabit(h.id)} C={C}/><span style={{fontSize:13,flex:1,color:done?C.muted:C.text,textDecoration:done?"line-through":"none"}}>{h.name}</span></div>;})</SectionCard>}
+    {dayChallenges.length>0&&<SectionCard title="Výzvy" C={C}>{dayChallenges.map((c,i)=>{const done=!!(c.doneMap&&c.doneMap[tod]);return <div key={c.id} style={{display:"flex",alignItems:"center",gap:12,padding:"11px 14px",borderBottom:i<dayChallenges.length-1?`1px solid ${C.sepLine}`:"none",cursor:"pointer",background:done?C.lavLight:"transparent"}} onClick={()=>toggleChallenge(c.id)}><CheckBox done={done} onToggle={()=>toggleChallenge(c.id)} C={C}/><span style={{fontSize:13,flex:1,textDecoration:done?"line-through":"none",color:done?C.muted:C.text}}>{c.text}</span></div>;})</SectionCard>}
+  </div>;
 }
 
 function Todo({C}){
@@ -409,65 +421,63 @@ function Todo({C}){
   const isToday=t=>isTaskDoneFn(t,tod);
   const todo=tasks.filter(t=>!isToday(t)&&(!t.repeat||t.repeat==="none"?!t.done:true)&&(filterCat==="all"||t.colorId===filterCat)&&(!search||t.text.toLowerCase().includes(search.toLowerCase())));
   const done=tasks.filter(t=>(!t.repeat||t.repeat==="none")&&t.done&&(filterCat==="all"||t.colorId===filterCat)&&(!search||t.text.toLowerCase().includes(search.toLowerCase())));
-  return(
-    <div style={{position:"relative"}}>
-      <Confetti trigger={confetti}/>
-      <div style={{display:"flex",gap:8,marginBottom:10}}>
-        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Hľadať úlohy..." style={{flex:1,border:`1px solid ${C.border}`,borderRadius:10,padding:"8px 12px",fontSize:13,background:C.card,color:C.text,outline:"none"}}/>
-        {search&&<button onClick={()=>setSearch("")} style={{background:C.border,border:"none",borderRadius:10,padding:"8px 12px",cursor:"pointer",color:C.muted,fontSize:12}}>✕</button>}
-      </div>
-      <div style={{display:"flex",gap:5,marginBottom:14,flexWrap:"wrap",alignItems:"center"}}>
-        <button onClick={()=>setFilterCat("all")} style={{padding:"5px 10px",borderRadius:999,border:`1px solid ${filterCat==="all"?"#c9a84c":C.border}`,background:filterCat==="all"?C.accentLight:"transparent",fontSize:10,fontWeight:700,color:filterCat==="all"?C.gold:C.muted,cursor:"pointer"}}>Všetky</button>
-        {TASK_CATS.map(tc=><button key={tc.id} onClick={()=>setFilterCat(filterCat===tc.id?"all":tc.id)} title={tc.label} style={{width:30,height:30,borderRadius:"50%",border:`1px solid ${filterCat===tc.id?tc.color:C.border}`,background:filterCat===tc.id?C.accentLight:"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><CatIcon id={tc.id} size={14}/></button>)}
-      </div>
-      <button onClick={()=>setShowForm(!showForm)} style={{width:"100%",background:C.accentLight,border:`1px dashed ${C.border}`,borderRadius:12,padding:"10px",cursor:"pointer",color:C.gold,fontWeight:600,fontSize:13,marginBottom:14}}>+ Pridať úlohu</button>
-      {showForm&&<TaskForm onSave={add} onCancel={()=>setShowForm(false)} C={C}/>}
-      {todo.length===0&&!showForm&&<div style={{textAlign:"center",color:C.muted,fontSize:13,padding:"24px 0",fontStyle:"italic"}}>{emptyMsg("todo")}</div>}
-      {todo.length>0&&<div style={{background:C.card,borderRadius:14,border:`1px solid ${C.border}`,overflow:"hidden",marginBottom:12}}>
-        {todo.map((t,i)=>(
-          editing===t.id
-            ?<div key={t.id} style={{padding:12}}><TaskForm initial={t} onSave={f=>save(t.id,f)} onCancel={()=>setEditing(null)} C={C}/></div>
-            :<div key={t.id} draggable onDragStart={()=>onDragStart(i)} onDragOver={e=>{e.preventDefault();e.currentTarget.style.outline=`2px dashed ${C.gold}`;}} onDragLeave={e=>e.currentTarget.style.outline=""} onDrop={e=>{e.currentTarget.style.outline="";onDrop(i);}}
-              style={{display:"flex",alignItems:"center",borderBottom:i<todo.length-1?`1px solid ${C.sepLine}`:"none",background:C.itemBg}}>
-              <div style={{padding:"11px 8px",color:C.border,cursor:"grab",userSelect:"none",fontSize:16}}>⠿</div>
-              <CatIcon id={t.colorId}/>
-              <div style={{flex:1,display:"flex",alignItems:"center",gap:10,padding:"11px 8px",minWidth:0,cursor:"pointer"}} onClick={()=>setEditing(t.id)}>
-                <CheckBox done={false} onToggle={()=>toggle(t.id)} C={C}/>
-                <div style={{flex:1,minWidth:0}}>
-                  <div style={{display:"flex",alignItems:"center",gap:5,flexWrap:"wrap"}}>
-                    <span style={{fontSize:13,fontWeight:500,color:C.text}}>{t.text}</span>
-                    {t.repeat&&t.repeat!=="none"&&<span style={{fontSize:9,background:C.accentLight,color:C.gold,borderRadius:999,padding:"1px 6px",fontWeight:700}}>{t.repeat==="daily"?"Každý deň":t.repeat==="weekly"?"Každý týždeň":t.repeat==="custom"?"Vybrané dni":""}</span>}
-                  </div>
-                  {t.date&&<div style={{fontSize:10,color:C.muted}}>{new Date(t.date+"T12:00").toLocaleDateString("sk-SK",{day:"numeric",month:"long"})}{t.timeFrom?` · ${t.timeFrom}`:""}{t.timeTo?` – ${t.timeTo}`:""}</div>}
-                  {t.note&&<div style={{fontSize:10,color:C.muted}}>{t.note}</div>}
-                </div>
-              </div>
-              <button onClick={()=>del(t.id)} style={{background:"none",border:"none",cursor:"pointer",color:C.border,fontSize:14,padding:"11px 12px"}}>✕</button>
-            </div>
-        ))}
-      </div>}
-      {done.length>0&&<details open={showArchive} onToggle={e=>setShowArchive(e.target.open)}>
-        <summary style={{fontSize:11,color:C.muted,cursor:"pointer",display:"flex",alignItems:"center",gap:6,marginBottom:showArchive?8:0}}>
-          <span style={{fontSize:10,color:C.gold}}>{showArchive?"▾":"▸"}</span> Archív hotových ({done.length})
-        </summary>
-        <div style={{background:C.card,borderRadius:14,border:`1px solid ${C.border}`,overflow:"hidden",marginTop:6,opacity:0.5}}>
-          {done.map((t,i)=><div key={t.id} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 14px",borderBottom:i<done.length-1?`1px solid ${C.sepLine}`:"none"}}>
-            <CatIcon id={t.colorId} opacity={0.5}/>
-            <div onClick={()=>toggle(t.id)} style={{width:20,height:20,borderRadius:6,background:"#c9a84c",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0}}><Checkmark/></div>
-            <span style={{flex:1,fontSize:12,textDecoration:"line-through",color:C.muted}}>{t.text}</span>
-            <button onClick={()=>del(t.id)} style={{background:"none",border:"none",cursor:"pointer",color:C.border,fontSize:13}}>✕</button>
-          </div>)}
-        </div>
-      </details>}
+  return <div style={{position:"relative"}}>
+    <Confetti trigger={confetti}/>
+    <div style={{display:"flex",gap:8,marginBottom:10}}>
+      <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Hľadať úlohy..." style={{flex:1,border:`1px solid ${C.border}`,borderRadius:10,padding:"8px 12px",fontSize:13,background:C.card,color:C.text,outline:"none"}}/>
+      {search&&<button onClick={()=>setSearch("")} style={{background:C.border,border:"none",borderRadius:10,padding:"8px 12px",cursor:"pointer",color:C.muted,fontSize:12}}>✕</button>}
     </div>
-  );
+    <div style={{display:"flex",gap:5,marginBottom:14,flexWrap:"wrap",alignItems:"center"}}>
+      <button onClick={()=>setFilterCat("all")} style={{padding:"5px 10px",borderRadius:999,border:`1px solid ${filterCat==="all"?"#c9a84c":C.border}`,background:filterCat==="all"?C.accentLight:"transparent",fontSize:10,fontWeight:700,color:filterCat==="all"?C.gold:C.muted,cursor:"pointer"}}>Všetky</button>
+      {TASK_CATS.map(tc=><button key={tc.id} onClick={()=>setFilterCat(filterCat===tc.id?"all":tc.id)} title={tc.label} style={{width:30,height:30,borderRadius:"50%",border:`1px solid ${filterCat===tc.id?tc.color:C.border}`,background:filterCat===tc.id?C.accentLight:"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><CatIcon id={tc.id} size={14}/></button>)}
+    </div>
+    <button onClick={()=>setShowForm(!showForm)} style={{width:"100%",background:C.accentLight,border:`1px dashed ${C.border}`,borderRadius:12,padding:"10px",cursor:"pointer",color:C.gold,fontWeight:600,fontSize:13,marginBottom:14}}>+ Pridať úlohu</button>
+    {showForm&&<TaskForm onSave={add} onCancel={()=>setShowForm(false)} C={C}/>}
+    {todo.length===0&&!showForm&&<div style={{textAlign:"center",color:C.muted,fontSize:13,padding:"24px 0",fontStyle:"italic"}}>Čistý stôl, čistá myseľ. ✦</div>}
+    {todo.length>0&&<div style={{background:C.card,borderRadius:14,border:`1px solid ${C.border}`,overflow:"hidden",marginBottom:12}}>
+      {todo.map((t,i)=>(
+        editing===t.id
+          ?<div key={t.id} style={{padding:12}}><TaskForm initial={t} onSave={f=>save(t.id,f)} onCancel={()=>setEditing(null)} C={C}/></div>
+          :<div key={t.id} draggable onDragStart={()=>onDragStart(i)} onDragOver={e=>{e.preventDefault();e.currentTarget.style.outline=`2px dashed ${C.gold}`;}} onDragLeave={e=>e.currentTarget.style.outline=""} onDrop={e=>{e.currentTarget.style.outline="";onDrop(i);}}
+            style={{display:"flex",alignItems:"center",borderBottom:i<todo.length-1?`1px solid ${C.sepLine}`:"none",background:C.itemBg}}>
+            <div style={{padding:"11px 8px",color:C.border,cursor:"grab",userSelect:"none",fontSize:16}}>⠿</div>
+            <CatIcon id={t.colorId}/>
+            <div style={{flex:1,display:"flex",alignItems:"center",gap:10,padding:"11px 8px",minWidth:0,cursor:"pointer"}} onClick={()=>setEditing(t.id)}>
+              <CheckBox done={false} onToggle={()=>toggle(t.id)} C={C}/>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{display:"flex",alignItems:"center",gap:5,flexWrap:"wrap"}}>
+                  <span style={{fontSize:13,fontWeight:500,color:C.text}}>{t.text}</span>
+                  {t.repeat&&t.repeat!=="none"&&<span style={{fontSize:9,background:C.accentLight,color:C.gold,borderRadius:999,padding:"1px 6px",fontWeight:700}}>{t.repeat==="daily"?"Denne":t.repeat==="weekly"?"Týžd.":"Vlastné"}</span>}
+                </div>
+                {t.date&&<div style={{fontSize:10,color:C.muted}}>{new Date(t.date+"T12:00").toLocaleDateString("sk-SK",{day:"numeric",month:"long"})}{t.timeFrom?` · ${t.timeFrom}`:""}{t.timeTo?` – ${t.timeTo}`:""}</div>}
+                {t.note&&<div style={{fontSize:10,color:C.muted}}>{t.note}</div>}
+              </div>
+            </div>
+            <button onClick={()=>del(t.id)} style={{background:"none",border:"none",cursor:"pointer",color:C.border,fontSize:14,padding:"11px 12px"}}>✕</button>
+          </div>
+      ))}
+    </div>}
+    {done.length>0&&<details open={showArchive} onToggle={e=>setShowArchive(e.target.open)}>
+      <summary style={{fontSize:11,color:C.muted,cursor:"pointer",display:"flex",alignItems:"center",gap:6,marginBottom:showArchive?8:0}}>
+        <span style={{fontSize:10,color:C.gold}}>{showArchive?"▾":"▸"}</span> Archív ({done.length})
+      </summary>
+      <div style={{background:C.card,borderRadius:14,border:`1px solid ${C.border}`,overflow:"hidden",marginTop:6,opacity:0.5}}>
+        {done.map((t,i)=><div key={t.id} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 14px",borderBottom:i<done.length-1?`1px solid ${C.sepLine}`:"none"}}>
+          <CatIcon id={t.colorId} opacity={0.5}/>
+          <div onClick={()=>toggle(t.id)} style={{width:20,height:20,borderRadius:6,background:"#c9a84c",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0}}><SvgIcon name="check" size={11} color="#1a1208"/></div>
+          <span style={{flex:1,fontSize:12,textDecoration:"line-through",color:C.muted}}>{t.text}</span>
+          <button onClick={()=>del(t.id)} style={{background:"none",border:"none",cursor:"pointer",color:C.border,fontSize:13}}>✕</button>
+        </div>)}
+      </div>
+    </details>}
+  </div>;
 }
 
 function Habits({C}){
   const[habits,setHabits]=useStorage("habits",[]);
   const[showForm,setShowForm]=useState(false);
   const[editing,setEditing]=useState(null);
-  const[form,setForm]=useState({name:"",repeat:"daily",days:[],weekTarget:3});
+  const[form,setForm]=useState({name:"",weekTarget:7});
   const[editForm,setEditForm]=useState({});
   const[confetti,setConfetti]=useState(0);
   const[search,setSearch]=useState("");
@@ -476,28 +486,8 @@ function Habits({C}){
   const ws=weekMonday(tod);
   const dim=daysInMonth(now.getFullYear(),now.getMonth());
   const monthDays=Array.from({length:dim},(_,i)=>toISO(new Date(now.getFullYear(),now.getMonth(),i+1)));
-  const toggleDay=d=>setForm(f=>({...f,days:f.days.includes(d)?f.days.filter(x=>x!==d):[...f.days,d]}));
-
-  const toggleHabitDay=(id,day)=>{
-    setHabits(hs=>hs.map(h=>{
-      if(h.id!==id)return h;
-      const checks={...(h.checks||{})};
-      checks[day]=!checks[day];
-      // recalculate streak from today backwards
-      let streak=0;
-      if(h.repeat==="xweek"){
-        let w=new Date(ws+"T12:00");
-        while(true){const wStart=toISO(w);const cnt=Array.from({length:7},(_,i)=>{const d=new Date(wStart+"T12:00");d.setDate(d.getDate()+i);return toISO(d);}).filter(d=>checks[d]).length;if(cnt>=(h.weekTarget||1)){streak++;w.setDate(w.getDate()-7);}else break;}
-      } else {
-        let d=new Date();
-        while(true){const k=toISO(d);if(checks[k]){streak++;d.setDate(d.getDate()-1);}else break;}
-      }
-      return{...h,checks,streak};
-    }));
-    setConfetti(x=>x+1);
-  };
-
-  const add=()=>{if(!form.name.trim())return;setHabits(h=>[...h,{id:Date.now(),name:form.name.trim(),repeat:form.repeat,days:form.days,weekTarget:form.weekTarget||1,checks:{},streak:0,createdAt:tod}]);setForm({name:"",repeat:"daily",days:[],weekTarget:3});setShowForm(false);};
+  const toggleHabitDay=(id,day)=>{setHabits(hs=>hs.map(h=>{if(h.id!==id)return h;const checks={...(h.checks||{})};checks[day]=!checks[day];let streak=0;let w=new Date(weekMonday(tod)+"T12:00");while(true){const wStart=toISO(w);const cnt=habitWeekCount({...h,checks},wStart);if(cnt>=(h.weekTarget||7)){streak++;w.setDate(w.getDate()-7);}else break;}return{...h,checks,streak};}));setConfetti(x=>x+1);};
+  const add=()=>{if(!form.name.trim())return;setHabits(h=>[...h,{id:Date.now(),name:form.name.trim(),weekTarget:form.weekTarget,checks:{},streak:0,createdAt:tod}]);setForm({name:"",weekTarget:7});setShowForm(false);};
   const saveEdit=id=>{setHabits(hs=>hs.map(h=>h.id===id?{...h,...editForm}:h));setEditing(null);};
   const del=id=>setHabits(h=>h.filter(x=>x.id!==id));
   const todayHabits=habits.filter(h=>habitDueToday(h,tod));
@@ -505,116 +495,76 @@ function Habits({C}){
   const pct=todayHabits.length?Math.round((doneToday/todayHabits.length)*100):0;
   const filtered=habits.filter(h=>!search||h.name.toLowerCase().includes(search.toLowerCase()));
   const si={width:"100%",border:`1px solid ${C.border}`,borderRadius:10,padding:"8px 10px",fontSize:13,marginBottom:8,boxSizing:"border-box",background:C.card,color:C.text,outline:"none"};
-
-  return(
-    <div style={{position:"relative"}}>
-      <Confetti trigger={confetti}/>
-      {todayHabits.length>0&&<div style={{marginBottom:14,display:"flex",alignItems:"center",gap:10}}><Bar pct={pct} color={C.gold} C={C}/><span style={{fontWeight:700,color:C.gold,minWidth:36,fontSize:13}}>{pct}%</span></div>}
-      <div style={{display:"flex",gap:8,marginBottom:12}}>
-        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Hľadať návyky..." style={{flex:1,border:`1px solid ${C.border}`,borderRadius:10,padding:"8px 12px",fontSize:13,background:C.card,color:C.text,outline:"none"}}/>
-        {search&&<button onClick={()=>setSearch("")} style={{background:C.border,border:"none",borderRadius:10,padding:"8px 12px",cursor:"pointer",color:C.muted,fontSize:12}}>✕</button>}
-      </div>
-      <button onClick={()=>setShowForm(!showForm)} style={{width:"100%",background:C.accentLight,border:`1px dashed ${C.border}`,borderRadius:12,padding:"10px",cursor:"pointer",color:C.gold,fontWeight:600,fontSize:13,marginBottom:14}}>+ Pridať návyk</button>
-      {showForm&&<div style={{background:C.accentLight,borderRadius:16,padding:14,marginBottom:14}}>
-        <input value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))} placeholder="Názov návyku" style={si}/>
-        <div style={{display:"flex",gap:6,marginBottom:10,flexWrap:"wrap"}}>
-          {REPEAT_OPTIONS.map(([k,v])=><button key={k} onClick={()=>setForm(f=>({...f,repeat:k}))} style={{padding:"4px 12px",borderRadius:999,border:"none",cursor:"pointer",fontSize:11,fontWeight:700,background:form.repeat===k?"#c9a84c":C.card,color:form.repeat===k?"#1a1208":C.muted}}>{v}</button>)}
-        </div>
-        {form.repeat==="xweek"&&<div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10,flexWrap:"wrap"}}>
-          <span style={{fontSize:12,color:C.muted}}>Cieľ:</span>
-          {[1,2,3,4,5,6,7].map(n=><button key={n} onClick={()=>setForm(f=>({...f,weekTarget:n}))} style={{width:30,height:30,borderRadius:8,border:"none",cursor:"pointer",fontSize:12,fontWeight:700,background:form.weekTarget===n?"#c9a84c":C.card,color:form.weekTarget===n?"#1a1208":C.muted}}>{n}</button>)}
-          <span style={{fontSize:12,color:C.muted}}>× / týždeň</span>
-        </div>}
-        {form.repeat==="custom"&&<div style={{display:"flex",gap:5,marginBottom:10,flexWrap:"wrap"}}>{DOW_LABELS.map((d,i)=><button key={i} onClick={()=>toggleDay(i)} style={{width:32,height:32,borderRadius:8,border:"none",cursor:"pointer",fontSize:11,fontWeight:700,background:form.days.includes(i)?"#c9a84c":C.card,color:form.days.includes(i)?"#1a1208":C.muted}}>{d}</button>)}</div>}
-        <div style={{display:"flex",gap:8}}><button onClick={add} style={{flex:1,background:"#c9a84c",border:"none",borderRadius:10,padding:"9px",color:"#1a1208",fontWeight:700,fontSize:13,cursor:"pointer"}}>Pridať</button><button onClick={()=>setShowForm(false)} style={{background:C.border,border:"none",borderRadius:10,padding:"9px 14px",cursor:"pointer",color:C.muted,fontWeight:600}}>Zrušiť</button></div>
-      </div>}
-      {filtered.length===0&&<div style={{textAlign:"center",color:C.muted,fontSize:13,padding:"24px 0",fontStyle:"italic"}}>{emptyMsg("habits")}</div>}
-      {filtered.map((h,i)=>{
-        const due=habitDueToday(h,tod);
-        const done=habitDoneOn(h,tod);
-        const weekDone=habitWeekCount(h,ws);
-        const weekTarget=h.weekTarget||1;
-        const weekPct=h.repeat==="xweek"?Math.round((weekDone/weekTarget)*100):null;
-        const doneCnt=monthDays.filter(d=>h.checks&&h.checks[d]).length;
-        return(
-          <div key={h.id} draggable onDragStart={()=>onDragStart(i)} onDragOver={e=>{e.preventDefault();e.currentTarget.style.outline=`2px dashed ${C.gold}`;}} onDragLeave={e=>e.currentTarget.style.outline=""} onDrop={e=>{e.currentTarget.style.outline="";onDrop(i);}}
-            style={{background:C.card,borderRadius:14,border:`1px solid ${C.border}`,marginBottom:8,overflow:"hidden",opacity:due?1:.55,cursor:"grab"}}>
-            {editing===h.id?<div style={{padding:12}}>
-              <input value={editForm.name||h.name} onChange={e=>setEditForm(f=>({...f,name:e.target.value}))} style={{...si,marginBottom:8}}/>
-              <div style={{display:"flex",gap:6,marginBottom:8,flexWrap:"wrap"}}>{REPEAT_OPTIONS.map(([k,v])=><button key={k} onClick={()=>setEditForm(f=>({...f,repeat:k}))} style={{padding:"4px 10px",borderRadius:999,border:"none",cursor:"pointer",fontSize:11,fontWeight:700,background:(editForm.repeat||h.repeat)===k?"#c9a84c":C.card,color:(editForm.repeat||h.repeat)===k?"#1a1208":C.muted}}>{v}</button>)}</div>
-              {(editForm.repeat||h.repeat)==="xweek"&&<div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8,flexWrap:"wrap"}}><span style={{fontSize:12,color:C.muted}}>Cieľ:</span>{[1,2,3,4,5,6,7].map(n=><button key={n} onClick={()=>setEditForm(f=>({...f,weekTarget:n}))} style={{width:28,height:28,borderRadius:7,border:"none",cursor:"pointer",fontSize:11,fontWeight:700,background:(editForm.weekTarget||h.weekTarget||1)===n?"#c9a84c":C.card,color:(editForm.weekTarget||h.weekTarget||1)===n?"#1a1208":C.muted}}>{n}</button>)}<span style={{fontSize:12,color:C.muted}}>× / týždeň</span></div>}
-              <div style={{display:"flex",gap:8}}><button onClick={()=>saveEdit(h.id)} style={{flex:1,background:"#c9a84c",border:"none",borderRadius:10,padding:"8px",color:"#1a1208",fontWeight:700,cursor:"pointer"}}>Uložiť</button><button onClick={()=>setEditing(null)} style={{background:C.border,border:"none",borderRadius:10,padding:"8px 12px",cursor:"pointer",color:C.muted,fontWeight:600}}>Zrušiť</button></div>
-            </div>:<>
-              {/* Header row */}
-              <div style={{display:"flex",alignItems:"center",padding:"12px 14px",gap:10}}>
-                <div style={{color:C.border,userSelect:"none",fontSize:16,cursor:"grab",flexShrink:0}}>⠿</div>
-                <CheckBox done={done} onToggle={()=>toggleHabitDay(h.id,tod)} C={C}/>
-                <div style={{flex:1,cursor:"pointer",minWidth:0}} onClick={()=>{setEditing(h.id);setEditForm({name:h.name,repeat:h.repeat,days:h.days,weekTarget:h.weekTarget});}}>
-                  <div style={{fontSize:13,fontWeight:500,color:done?C.muted:C.text,textDecoration:done?"line-through":"none"}}>{h.name}</div>
-                  <div style={{fontSize:10,color:C.muted}}>
-                    {h.repeat==="xweek"?`${weekDone}/${weekTarget}× tento týždeň`:h.repeat==="daily"?"Denne":h.repeat==="weekly"?"Týždenne":h.repeat==="custom"&&h.days?.length?h.days.map(d=>DOW_LABELS[d]).join(", "):""}
-                  </div>
-                </div>
-                {h.repeat==="xweek"?(
-                  <div style={{background:weekDone>=weekTarget?C.accentLight:C.itemBg,borderRadius:8,padding:"3px 10px",fontSize:11,color:weekDone>=weekTarget?C.gold:C.muted,fontWeight:700,border:`1px solid ${C.border}`,whiteSpace:"nowrap",flexShrink:0}}>
-                    {weekDone}/{weekTarget}
-                  </div>
-                ):(
-                  <div style={{display:"flex",alignItems:"center",gap:5,background:C.accentLight,borderRadius:8,padding:"3px 10px",border:`1px solid ${C.border}`,flexShrink:0}}>
-                    <StarIcon/><span style={{fontSize:11,color:C.gold,fontWeight:700}}>{h.streak||0}</span>
-                  </div>
-                )}
-                <button onClick={()=>del(h.id)} style={{background:"none",border:"none",cursor:"pointer",color:C.border,fontSize:14,padding:0,flexShrink:0}}>✕</button>
-              </div>
-              {h.repeat==="xweek"&&<div style={{padding:"0 14px 8px"}}><Bar pct={weekPct} color={weekDone>=weekTarget?"#c9a84c":C.accent} C={C} h={3}/></div>}
-              {/* Collapsible month grid */}
-              <details style={{borderTop:`1px solid ${C.sepLine}`}}>
-                <summary style={{cursor:"pointer",padding:"7px 14px",display:"flex",alignItems:"center",gap:6}}>
-                  <span style={{fontSize:9,color:C.gold,fontWeight:700}}>▸</span>
-                  <span style={{fontSize:9,color:C.muted,letterSpacing:0.5}}>{SK_MONTHS[now.getMonth()]} · {doneCnt}/{dim}</span>
-                  <Bar pct={Math.round((doneCnt/dim)*100)} color={C.gold} C={C} h={3}/>
-                  <span style={{fontSize:9,color:C.gold,fontWeight:700,minWidth:28}}>{Math.round((doneCnt/dim)*100)}%</span>
-                </summary>
-                <div style={{padding:"10px 14px 12px"}}>
-                  {/* Day labels */}
-                  <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:3,marginBottom:4}}>
-                    {SK_DAYS_SHORT.map((d,i)=><div key={i} style={{textAlign:"center",fontSize:8,color:C.muted}}>{d}</div>)}
-                  </div>
-                  {/* Month grid with week offset */}
-                  {(()=>{
-                    const firstDow=new Date(now.getFullYear(),now.getMonth(),1).getDay();
-                    const off=monOffset(firstDow);
-                    const cells=[...Array(off).fill(null),...monthDays];
-                    const rows=[];
-                    for(let i=0;i<cells.length;i+=7)rows.push(cells.slice(i,i+7));
-                    return rows.map((row,ri)=>(
-                      <div key={ri} style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:3,marginBottom:3}}>
-                        {row.map((day,di)=>{
-                          if(!day)return<div key={di}/>;
-                          const isDone=!!(h.checks&&h.checks[day]);
-                          const isFuture=day>tod;
-                          const isToday=day===tod;
-                          const d=new Date(day+"T12:00");
-                          return(
-                            <div key={di} onClick={()=>!isFuture&&toggleHabitDay(h.id,day)}
-                              title={`${d.getDate()}. ${SK_MONTHS[d.getMonth()].slice(0,3)}`}
-                              style={{height:22,borderRadius:5,background:isDone?"#c9a84c":isFuture?C.bg:C.accentLight,border:isToday?`1.5px solid ${C.gold}`:`1px solid ${isFuture?"transparent":C.border}`,cursor:isFuture?"default":"pointer",opacity:isFuture?0.2:1,display:"flex",alignItems:"center",justifyContent:"center",transition:"background .15s"}}>
-                              {isDone&&<svg width="8" height="6" viewBox="0 0 11 8" fill="none"><polyline points="1,4 4,7 10,1" stroke="#1a1208" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-                              {!isDone&&!isFuture&&<span style={{fontSize:8,color:C.muted,fontWeight:500}}>{d.getDate()}</span>}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    ));
-                  })()}
-                </div>
-              </details>
-            </>}
-          </div>
-        );
-      })}
+  return <div style={{position:"relative"}}>
+    <Confetti trigger={confetti}/>
+    {todayHabits.length>0&&<div style={{marginBottom:14,display:"flex",alignItems:"center",gap:10}}><Bar pct={pct} color={C.gold} C={C}/><span style={{fontWeight:700,color:C.gold,minWidth:36,fontSize:13}}>{pct}%</span></div>}
+    <div style={{display:"flex",gap:8,marginBottom:12}}>
+      <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Hľadať návyky..." style={{flex:1,border:`1px solid ${C.border}`,borderRadius:10,padding:"8px 12px",fontSize:13,background:C.card,color:C.text,outline:"none"}}/>
+      {search&&<button onClick={()=>setSearch("")} style={{background:C.border,border:"none",borderRadius:10,padding:"8px 12px",cursor:"pointer",color:C.muted,fontSize:12}}>✕</button>}
     </div>
-  );
+    <button onClick={()=>setShowForm(!showForm)} style={{width:"100%",background:C.accentLight,border:`1px dashed ${C.border}`,borderRadius:12,padding:"10px",cursor:"pointer",color:C.gold,fontWeight:600,fontSize:13,marginBottom:14}}>+ Pridať návyk</button>
+    {showForm&&<div style={{background:C.accentLight,borderRadius:16,padding:14,marginBottom:14}}>
+      <input value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))} placeholder="Názov návyku (napr. Tréning, Lieky...)" style={si}/>
+      <div style={{fontSize:10,color:C.muted,marginBottom:8,letterSpacing:1,textTransform:"uppercase"}}>Cieľ dní za týždeň</div>
+      <div style={{display:"flex",gap:6,marginBottom:8}}>
+        {[1,2,3,4,5,6,7].map(n=><button key={n} onClick={()=>setForm(f=>({...f,weekTarget:n}))} style={{flex:1,height:36,borderRadius:9,border:"none",cursor:"pointer",fontSize:13,fontWeight:700,background:form.weekTarget===n?"#c9a84c":C.card,color:form.weekTarget===n?"#1a1208":C.muted,transition:"all .15s"}}>{n}</button>)}
+      </div>
+      <div style={{fontSize:11,color:C.muted,marginBottom:12,textAlign:"center"}}>{form.weekTarget===7?"Každý deň":form.weekTarget===1?"Aspoň raz týždenne":`${form.weekTarget}× za týždeň`}</div>
+      <div style={{display:"flex",gap:8}}><button onClick={add} style={{flex:1,background:"#c9a84c",border:"none",borderRadius:10,padding:"9px",color:"#1a1208",fontWeight:700,fontSize:13,cursor:"pointer"}}>Pridať</button><button onClick={()=>setShowForm(false)} style={{background:C.border,border:"none",borderRadius:10,padding:"9px 14px",cursor:"pointer",color:C.muted,fontWeight:600}}>Zrušiť</button></div>
+    </div>}
+    {filtered.length===0&&<div style={{textAlign:"center",color:C.muted,fontSize:13,padding:"24px 0",fontStyle:"italic"}}>Prvý návyk je najdôležitejší. ✦</div>}
+    {filtered.map((h,i)=>{
+      const done=habitDoneOn(h,tod);
+      const weekDone=habitWeekCount(h,ws);
+      const weekTarget=h.weekTarget||7;
+      const weekPct=Math.round((weekDone/weekTarget)*100);
+      const weekMet=weekDone>=weekTarget;
+      const doneCnt=monthDays.filter(d=>h.checks&&h.checks[d]).length;
+      return <div key={h.id} draggable onDragStart={()=>onDragStart(i)} onDragOver={e=>{e.preventDefault();e.currentTarget.style.outline=`2px dashed ${C.gold}`;}} onDragLeave={e=>e.currentTarget.style.outline=""} onDrop={e=>{e.currentTarget.style.outline="";onDrop(i);}}
+        style={{background:C.card,borderRadius:14,border:`1px solid ${weekMet?C.gold:C.border}`,marginBottom:8,overflow:"hidden",cursor:"grab",transition:"border .3s"}}>
+        {editing===h.id?<div style={{padding:12}}>
+          <input value={editForm.name||h.name} onChange={e=>setEditForm(f=>({...f,name:e.target.value}))} style={{...si,marginBottom:8}}/>
+          <div style={{fontSize:10,color:C.muted,marginBottom:6,letterSpacing:1,textTransform:"uppercase"}}>Cieľ dní za týždeň</div>
+          <div style={{display:"flex",gap:5,marginBottom:8}}>{[1,2,3,4,5,6,7].map(n=><button key={n} onClick={()=>setEditForm(f=>({...f,weekTarget:n}))} style={{flex:1,height:32,borderRadius:8,border:"none",cursor:"pointer",fontSize:12,fontWeight:700,background:(editForm.weekTarget||h.weekTarget||7)===n?"#c9a84c":C.card,color:(editForm.weekTarget||h.weekTarget||7)===n?"#1a1208":C.muted}}>{n}</button>)}</div>
+          <div style={{display:"flex",gap:8}}><button onClick={()=>saveEdit(h.id)} style={{flex:1,background:"#c9a84c",border:"none",borderRadius:10,padding:"8px",color:"#1a1208",fontWeight:700,cursor:"pointer"}}>Uložiť</button><button onClick={()=>setEditing(null)} style={{background:C.border,border:"none",borderRadius:10,padding:"8px 12px",cursor:"pointer",color:C.muted,fontWeight:600}}>Zrušiť</button></div>
+        </div>:<>
+          <div style={{display:"flex",alignItems:"center",padding:"12px 14px",gap:10}}>
+            <div style={{color:C.border,userSelect:"none",fontSize:16,cursor:"grab",flexShrink:0}}>⠿</div>
+            <CheckBox done={done} onToggle={()=>toggleHabitDay(h.id,tod)} C={C}/>
+            <div style={{flex:1,cursor:"pointer",minWidth:0}} onClick={()=>{setEditing(h.id);setEditForm({name:h.name,weekTarget:h.weekTarget});}}>
+              <div style={{fontSize:13,fontWeight:500,color:done?C.muted:C.text,textDecoration:done?"line-through":"none"}}>{h.name}</div>
+              <div style={{fontSize:10,color:C.muted}}>{weekTarget===7?"Každý deň":weekTarget===1?"Aspoň raz/týždeň":`${weekTarget}× za týždeň`}</div>
+            </div>
+            <div style={{background:weekMet?C.accentLight:C.itemBg,borderRadius:8,padding:"3px 10px",fontSize:12,color:weekMet?C.gold:C.muted,fontWeight:700,border:`1px solid ${weekMet?C.gold:C.border}`,whiteSpace:"nowrap",flexShrink:0}}>{weekDone}/{weekTarget}</div>
+            <div style={{display:"flex",alignItems:"center",gap:4,background:C.accentLight,borderRadius:8,padding:"3px 8px",border:`1px solid ${C.border}`,flexShrink:0}}><SvgIcon name="star" size={10} color="#c9a84c" fill="#c9a84c"/><span style={{fontSize:11,color:C.gold,fontWeight:700}}>{h.streak||0}</span></div>
+            <button onClick={()=>del(h.id)} style={{background:"none",border:"none",cursor:"pointer",color:C.border,fontSize:14,padding:0,flexShrink:0}}>✕</button>
+          </div>
+          <div style={{padding:"0 14px 8px"}}><Bar pct={weekPct} color={weekMet?"#c9a84c":C.accent} C={C} h={4}/></div>
+          <details style={{borderTop:`1px solid ${C.sepLine}`}}>
+            <summary style={{cursor:"pointer",padding:"7px 14px",display:"flex",alignItems:"center",gap:8}}>
+              <span style={{fontSize:9,color:C.gold}}>▸</span>
+              <span style={{fontSize:9,color:C.muted}}>{SK_MONTHS[now.getMonth()]} · {doneCnt}/{dim}</span>
+              <Bar pct={Math.round((doneCnt/dim)*100)} color={C.gold} C={C} h={3}/>
+              <span style={{fontSize:9,color:C.gold,fontWeight:700,minWidth:28}}>{Math.round((doneCnt/dim)*100)}%</span>
+            </summary>
+            <div style={{padding:"10px 14px 14px"}}>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2,marginBottom:4}}>
+                {SK_DAYS_SHORT.map((d,i)=><div key={i} style={{textAlign:"center",fontSize:8,color:C.muted,fontWeight:700}}>{d}</div>)}
+              </div>
+              {(()=>{const firstDow=new Date(now.getFullYear(),now.getMonth(),1).getDay();const off=monOffset(firstDow);const cells=[...Array(off).fill(null),...monthDays];const rows=[];for(let i=0;i<cells.length;i+=7)rows.push(cells.slice(i,i+7));
+                return rows.map((row,ri)=><div key={ri} style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:3,marginBottom:3}}>
+                  {row.map((day,di)=>{if(!day)return <div key={di}/>;const isDone=!!(h.checks&&h.checks[day]);const isFuture=day>tod;const isToday=day===tod;const dn=new Date(day+"T12:00").getDate();
+                    return <div key={di} onClick={()=>!isFuture&&toggleHabitDay(h.id,day)} style={{height:24,borderRadius:6,background:isDone?"#c9a84c":isFuture?"transparent":C.accentLight,border:isToday?`2px solid ${C.gold}`:`1px solid ${isFuture?"transparent":C.border}`,cursor:isFuture?"default":"pointer",opacity:isFuture?0.15:1,display:"flex",alignItems:"center",justifyContent:"center",transition:"background .15s"}}>
+                      {isDone?<SvgIcon name="check" size={9} color="#1a1208"/>:<span style={{fontSize:8,color:isFuture?"transparent":C.muted,fontWeight:500}}>{dn}</span>}
+                    </div>;})}
+                </div>);
+              })()}
+            </div>
+          </details>
+        </>}
+      </div>;
+    })}
+  </div>;
 }
 
 function Challenges({C}){
@@ -643,9 +593,9 @@ function Challenges({C}){
   const pastWeeks=[...new Set(past.map(c=>c.week))];
 
   const ChallengeRow=({c,ws,canToggle,i,arr})=>{
-    const wDays=getWeekDays(ws||currentWeek);
-    const{done,target,pct}=getChallengeStats(c,ws||currentWeek);
-    const isComplete=done>=target;
+    const{done:doneCnt,target,pct}=getChallengeStats(c,ws||currentWeek);
+    const isComplete=doneCnt>=target;
+    const doneDays=(getWeekDays(ws||currentWeek)).filter(d=>c.doneMap&&c.doneMap[d]&&d<=tod);
     return editing===c.id?(
       <div style={{padding:12,borderBottom:i<arr.length-1?`1px solid ${C.sepLine}`:"none"}}>
         <div style={{display:"flex",gap:8,marginBottom:8}}>
@@ -665,101 +615,84 @@ function Challenges({C}){
           {canToggle&&<div style={{color:C.border,userSelect:"none",fontSize:16,cursor:"grab",flexShrink:0}}>⠿</div>}
           <div style={{flex:1,cursor:"pointer",minWidth:0}} onClick={()=>{setEditing(c.id);setEditText(c.text);setEditTarget(c.target||7);}}>
             <div style={{fontSize:13,fontWeight:500,color:isComplete?C.muted:C.text,textDecoration:isComplete?"line-through":"none"}}>{c.text}</div>
-            <div style={{display:"flex",alignItems:"center",gap:8,marginTop:4}}>
-              <Bar pct={Math.min(100,pct)} color={isComplete?"#c9a84c":C.accent} C={C} h={3}/>
-              <span style={{fontSize:10,fontWeight:700,color:isComplete?C.gold:C.muted,minWidth:30,whiteSpace:"nowrap"}}>{done}/{target}d</span>
-            </div>
           </div>
           <button onClick={()=>del(c.id)} style={{background:"none",border:"none",cursor:"pointer",color:C.border,fontSize:14,flexShrink:0}}>✕</button>
         </div>
-        {ws&&<div style={{display:"flex",gap:3,padding:"0 14px 10px"}}>
-          {wDays.map((day,di)=>{
-            const isDone=!!(c.doneMap&&c.doneMap[day]);
-            const isFuture=day>tod;
-            const isToday=day===tod;
-            const d=new Date(day+"T12:00");
-            return(
-              <div key={di} onClick={()=>canToggle&&!isFuture&&toggleDay(c.id,day)}
-                title={SK_DAYS_SHORT[di]}
-                style={{flex:1,height:22,borderRadius:5,background:isDone?"#c9a84c":isFuture?C.bg:C.accentLight,border:isToday?`1.5px solid ${C.gold}`:`1px solid ${isFuture?"transparent":C.border}`,cursor:canToggle&&!isFuture?"pointer":"default",opacity:isFuture?0.25:1,display:"flex",alignItems:"center",justifyContent:"center"}}>
-                {isDone&&<svg width="8" height="6" viewBox="0 0 11 8" fill="none"><polyline points="1,4 4,7 10,1" stroke="#1a1208" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-                {!isDone&&!isFuture&&<span style={{fontSize:8,color:C.muted}}>{d.getDate()}</span>}
-              </div>
-            );
-          })}
-        </div>}
+        {ws&&(()=>{
+          return <div style={{padding:"0 14px 12px"}}>
+            <div style={{display:"flex",gap:5,alignItems:"center"}}>
+              {Array.from({length:target},(_,idx)=>{
+                const filled=idx<doneCnt;
+                return <div key={idx}
+                  onClick={()=>{if(!canToggle)return;if(filled){const lastDay=doneDays[doneDays.length-1];if(lastDay)toggleDay(c.id,lastDay);}else{const nextDay=getWeekDays(ws).find(d=>d<=tod&&!(c.doneMap&&c.doneMap[d]));if(nextDay)toggleDay(c.id,nextDay);}}}
+                  style={{flex:1,height:28,borderRadius:7,background:filled?"#c9a84c":C.accentLight,border:`1.5px solid ${filled?"#c9a84c":C.border}`,cursor:canToggle?"pointer":"default",display:"flex",alignItems:"center",justifyContent:"center",transition:"all .2s"}}>
+                  {filled&&<SvgIcon name="check" size={10} color="#1a1208"/>}
+                </div>;
+              })}
+              <span style={{fontSize:11,fontWeight:700,color:isComplete?C.gold:C.muted,marginLeft:4,whiteSpace:"nowrap"}}>{doneCnt}/{target}</span>
+            </div>
+          </div>;
+        })()}
       </div>
     );
   };
 
-  return(
-    <div style={{position:"relative"}}>
-      <Confetti trigger={confetti}/>
-      <div style={{display:"flex",gap:3,marginBottom:14,background:C.accentLight,borderRadius:12,padding:3}}>
-        <button onClick={()=>setWhich("current")} style={{flex:1,padding:"8px 6px",borderRadius:9,border:"none",cursor:"pointer",fontSize:11,fontWeight:700,background:which==="current"?"#c9a84c":"transparent",color:which==="current"?"#1a1208":C.muted}}>Tento týždeň</button>
-        <button onClick={()=>setWhich("next")} style={{flex:1,padding:"8px 6px",borderRadius:9,border:"none",cursor:"pointer",fontSize:11,fontWeight:700,background:which==="next"?"#c9a84c":"transparent",color:which==="next"?"#1a1208":C.muted}}>Budúci týždeň</button>
-      </div>
-      <div style={{marginBottom:14}}>
-        <div style={{display:"flex",gap:8,marginBottom:8}}>
-          <input value={text} onChange={e=>setText(e.target.value)} onKeyDown={e=>e.key==="Enter"&&add()} placeholder="Nová výzva..." style={{flex:1,border:`1px solid ${C.border}`,borderRadius:10,padding:"9px 12px",fontSize:13,background:C.card,color:C.text,outline:"none"}}/>
-          <button onClick={add} style={{background:"#c9a84c",border:"none",borderRadius:10,padding:"9px 14px",color:"#1a1208",fontWeight:700,fontSize:16,cursor:"pointer"}}>+</button>
-        </div>
-        <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
-          <span style={{fontSize:11,color:C.muted}}>Cieľ:</span>
-          {[1,2,3,4,5,6,7].map(n=><button key={n} onClick={()=>setTargetDays(n)} style={{width:26,height:26,borderRadius:7,border:"none",cursor:"pointer",fontSize:11,fontWeight:700,background:targetDays===n?"#c9a84c":C.card,color:targetDays===n?"#1a1208":C.muted}}>{n}</button>)}
-          <span style={{fontSize:11,color:C.muted}}>dní</span>
-        </div>
-      </div>
-      {which==="current"&&<>
-        {current.length===0&&<div style={{textAlign:"center",color:C.muted,fontSize:13,padding:"24px 0",fontStyle:"italic"}}>{emptyMsg("challenges")}</div>}
-        {current.length>0&&<div style={{background:C.card,borderRadius:14,border:`1px solid ${C.border}`,overflow:"hidden",marginBottom:12}}>
-          {current.map((c,i)=>(
-            <div key={c.id} draggable onDragStart={()=>ods(i)} onDragOver={e=>{e.preventDefault();e.currentTarget.style.outline=`2px dashed ${C.gold}`;}} onDragLeave={e=>e.currentTarget.style.outline=""} onDrop={e=>{e.currentTarget.style.outline="";odp(i);}}>
-              <ChallengeRow c={c} ws={currentWeek} canToggle={true} i={i} arr={current}/>
-            </div>
-          ))}
-        </div>}
-      </>}
-      {which==="next"&&<>
-        {next.length===0&&<div style={{textAlign:"center",color:C.muted,fontSize:13,padding:"24px 0",fontStyle:"italic"}}>Plánujte ďalší týždeň. ✦</div>}
-        {next.length>0&&<div style={{background:C.card,borderRadius:14,border:`1px solid ${C.border}`,overflow:"hidden",marginBottom:12}}>
-          {next.map((c,i)=><ChallengeRow key={c.id} c={c} ws={null} canToggle={false} i={i} arr={next}/>)}
-        </div>}
-      </>}
-      {past.length>0&&<details style={{marginTop:4}}>
-        <summary style={{fontSize:11,color:C.muted,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
-          <span style={{fontSize:10,color:C.gold}}>▸</span> Archív ({past.length} výziev)
-        </summary>
-        <div style={{marginTop:8}}>
-          {pastWeeks.map(ws=>{
-            const wcs=past.filter(c=>c.week===ws);
-            const totalDone=wcs.filter(c=>{const{done,target}=getChallengeStats(c,ws);return done>=target;}).length;
-            const avgPct=Math.round(wcs.reduce((s,c)=>{const{pct}=getChallengeStats(c,ws);return s+pct;},0)/wcs.length);
-            return(
-              <details key={ws} style={{marginBottom:6}}>
-                <summary style={{cursor:"pointer",display:"flex",alignItems:"center",gap:8,padding:"8px 12px",background:C.itemBg,borderRadius:10,border:`1px solid ${C.border}`}}>
-                  <span style={{fontSize:10,color:C.gold}}>▸</span>
-                  <span style={{fontSize:12,color:C.text,flex:1}}>{weekLabel(ws)}</span>
-                  <span style={{fontSize:11,fontWeight:700,color:avgPct>=80?C.gold:C.muted}}>{totalDone}/{wcs.length} · {avgPct}%</span>
-                </summary>
-                <div style={{background:C.card,borderRadius:10,border:`1px solid ${C.border}`,overflow:"hidden",marginTop:4,opacity:0.7}}>
-                  {wcs.map((c,i)=>{const{done,target,pct}=getChallengeStats(c,ws);const complete=done>=target;return(
-                    <div key={c.id} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 14px",borderBottom:i<wcs.length-1?`1px solid ${C.sepLine}`:"none"}}>
-                      <div style={{width:18,height:18,borderRadius:5,background:complete?"#c9a84c":C.border,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                        {complete&&<svg width="9" height="7" viewBox="0 0 11 8" fill="none"><polyline points="1,4 4,7 10,1" stroke="#1a1208" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-                      </div>
-                      <span style={{flex:1,fontSize:12,textDecoration:complete?"line-through":"none",color:complete?C.muted:C.text}}>{c.text}</span>
-                      <span style={{fontSize:11,fontWeight:700,color:complete?C.gold:C.muted,whiteSpace:"nowrap"}}>{done}/{target}d · {pct}%</span>
-                    </div>
-                  );})}
-                </div>
-              </details>
-            );
-          })}
-        </div>
-      </details>}
+  return <div style={{position:"relative"}}>
+    <Confetti trigger={confetti}/>
+    <div style={{display:"flex",gap:3,marginBottom:14,background:C.accentLight,borderRadius:12,padding:3}}>
+      <button onClick={()=>setWhich("current")} style={{flex:1,padding:"8px 6px",borderRadius:9,border:"none",cursor:"pointer",fontSize:11,fontWeight:700,background:which==="current"?"#c9a84c":"transparent",color:which==="current"?"#1a1208":C.muted}}>Tento týždeň</button>
+      <button onClick={()=>setWhich("next")} style={{flex:1,padding:"8px 6px",borderRadius:9,border:"none",cursor:"pointer",fontSize:11,fontWeight:700,background:which==="next"?"#c9a84c":"transparent",color:which==="next"?"#1a1208":C.muted}}>Budúci týždeň</button>
     </div>
-  );
+    <div style={{marginBottom:14}}>
+      <div style={{display:"flex",gap:8,marginBottom:8}}>
+        <input value={text} onChange={e=>setText(e.target.value)} onKeyDown={e=>e.key==="Enter"&&add()} placeholder="Nová výzva..." style={{flex:1,border:`1px solid ${C.border}`,borderRadius:10,padding:"9px 12px",fontSize:13,background:C.card,color:C.text,outline:"none"}}/>
+        <button onClick={add} style={{background:"#c9a84c",border:"none",borderRadius:10,padding:"9px 14px",color:"#1a1208",fontWeight:700,fontSize:16,cursor:"pointer"}}>+</button>
+      </div>
+      <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+        <span style={{fontSize:11,color:C.muted}}>Cieľ:</span>
+        {[1,2,3,4,5,6,7].map(n=><button key={n} onClick={()=>setTargetDays(n)} style={{width:26,height:26,borderRadius:7,border:"none",cursor:"pointer",fontSize:11,fontWeight:700,background:targetDays===n?"#c9a84c":C.card,color:targetDays===n?"#1a1208":C.muted}}>{n}</button>)}
+        <span style={{fontSize:11,color:C.muted}}>dní</span>
+      </div>
+    </div>
+    {which==="current"&&<>
+      {current.length===0&&<div style={{textAlign:"center",color:C.muted,fontSize:13,padding:"24px 0",fontStyle:"italic"}}>Výzva čaká na teba. ✦</div>}
+      {current.length>0&&<div style={{background:C.card,borderRadius:14,border:`1px solid ${C.border}`,overflow:"hidden",marginBottom:12}}>
+        {current.map((c,i)=><div key={c.id} draggable onDragStart={()=>ods(i)} onDragOver={e=>{e.preventDefault();e.currentTarget.style.outline=`2px dashed ${C.gold}`;}} onDragLeave={e=>e.currentTarget.style.outline=""} onDrop={e=>{e.currentTarget.style.outline="";odp(i);}}><ChallengeRow c={c} ws={currentWeek} canToggle={true} i={i} arr={current}/></div>)}
+      </div>}
+    </>}
+    {which==="next"&&<>
+      {next.length===0&&<div style={{textAlign:"center",color:C.muted,fontSize:13,padding:"24px 0",fontStyle:"italic"}}>Plánujte ďalší týždeň. ✦</div>}
+      {next.length>0&&<div style={{background:C.card,borderRadius:14,border:`1px solid ${C.border}`,overflow:"hidden",marginBottom:12}}>
+        {next.map((c,i)=><ChallengeRow key={c.id} c={c} ws={null} canToggle={false} i={i} arr={next}/>)}
+      </div>}
+    </>}
+    {past.length>0&&<details style={{marginTop:4}}>
+      <summary style={{fontSize:11,color:C.muted,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
+        <span style={{fontSize:10,color:C.gold}}>▸</span> Archív ({past.length})
+      </summary>
+      <div style={{marginTop:8}}>
+        {pastWeeks.map(ws=>{
+          const wcs=past.filter(c=>c.week===ws);
+          const totalDone=wcs.filter(c=>{const{done,target}=getChallengeStats(c,ws);return done>=target;}).length;
+          const avgPct=Math.round(wcs.reduce((s,c)=>{const{pct}=getChallengeStats(c,ws);return s+pct;},0)/wcs.length);
+          return <details key={ws} style={{marginBottom:6}}>
+            <summary style={{cursor:"pointer",display:"flex",alignItems:"center",gap:8,padding:"8px 12px",background:C.itemBg,borderRadius:10,border:`1px solid ${C.border}`}}>
+              <span style={{fontSize:10,color:C.gold}}>▸</span>
+              <span style={{fontSize:12,color:C.text,flex:1}}>{weekLabel(ws)}</span>
+              <span style={{fontSize:11,fontWeight:700,color:avgPct>=80?C.gold:C.muted}}>{totalDone}/{wcs.length} · {avgPct}%</span>
+            </summary>
+            <div style={{background:C.card,borderRadius:10,border:`1px solid ${C.border}`,overflow:"hidden",marginTop:4,opacity:0.7}}>
+              {wcs.map((c,i)=>{const{done,target,pct}=getChallengeStats(c,ws);const complete=done>=target;return <div key={c.id} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 14px",borderBottom:i<wcs.length-1?`1px solid ${C.sepLine}`:"none"}}>
+                <div style={{width:18,height:18,borderRadius:5,background:complete?"#c9a84c":C.border,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{complete&&<SvgIcon name="check" size={9} color="#1a1208"/>}</div>
+                <span style={{flex:1,fontSize:12,textDecoration:complete?"line-through":"none",color:complete?C.muted:C.text}}>{c.text}</span>
+                <span style={{fontSize:11,fontWeight:700,color:complete?C.gold:C.muted,whiteSpace:"nowrap"}}>{done}/{target}d · {pct}%</span>
+              </div>;})}
+            </div>
+          </details>;
+        })}
+      </div>
+    </details>}
+  </div>;
 }
 
 function Weight({C}){
@@ -783,73 +716,109 @@ function Weight({C}){
   const diff=firstEntry&&lastEntry&&entries.length>1?(lastEntry.weight-firstEntry.weight).toFixed(1):null;
   const si={border:`1px solid ${C.border}`,borderRadius:10,padding:"8px 10px",fontSize:13,background:C.card,color:C.text,outline:"none"};
   const cycleSet=new Set(cycleLog.map(c=>c.date));
-  return(
-    <div>
-      <div style={{background:C.accentLight,borderRadius:16,padding:14,marginBottom:14}}>
-        <div style={{fontSize:9,fontWeight:700,color:C.gold,textTransform:"uppercase",letterSpacing:2,marginBottom:10}}>Zadať hmotnosť</div>
-        <div style={{display:"flex",gap:8,marginBottom:8}}><input type="date" value={form.date} onChange={e=>setForm(f=>({...f,date:e.target.value}))} style={{...si,flex:1}}/><input type="number" step="0.1" value={form.weight} onChange={e=>setForm(f=>({...f,weight:e.target.value}))} placeholder="kg" style={{...si,width:70}}/></div>
-        <input value={form.note} onChange={e=>setForm(f=>({...f,note:e.target.value}))} placeholder="Poznámka" style={{...si,width:"100%",marginBottom:8,boxSizing:"border-box"}}/>
-        <button onClick={addWeight} style={{width:"100%",background:"#c9a84c",border:"none",borderRadius:10,padding:"9px",color:"#1a1208",fontWeight:700,fontSize:13,cursor:"pointer"}}>Uložiť</button>
+  return <div>
+    <div style={{background:C.accentLight,borderRadius:16,padding:14,marginBottom:14}}>
+      <div style={{fontSize:9,fontWeight:700,color:C.gold,textTransform:"uppercase",letterSpacing:2,marginBottom:10}}>Zadať hmotnosť</div>
+      <div style={{display:"flex",gap:8,marginBottom:8}}><input type="date" value={form.date} onChange={e=>setForm(f=>({...f,date:e.target.value}))} style={{...si,flex:1}}/><input type="number" step="0.1" value={form.weight} onChange={e=>setForm(f=>({...f,weight:e.target.value}))} placeholder="kg" style={{...si,width:70}}/></div>
+      <input value={form.note} onChange={e=>setForm(f=>({...f,note:e.target.value}))} placeholder="Poznámka" style={{...si,width:"100%",marginBottom:8,boxSizing:"border-box"}}/>
+      <button onClick={addWeight} style={{width:"100%",background:"#c9a84c",border:"none",borderRadius:10,padding:"9px",color:"#1a1208",fontWeight:700,fontSize:13,cursor:"pointer"}}>Uložiť</button>
+    </div>
+    {diff!==null&&<div style={{display:"flex",gap:10,marginBottom:14}}>
+      <div style={{flex:1,background:C.accentLight,borderRadius:12,padding:"12px",textAlign:"center"}}><div style={{fontSize:20,fontWeight:700,color:C.gold}}>{diff>0?"+":""}{diff} kg</div><div style={{fontSize:10,color:C.muted}}>celková zmena</div></div>
+      {lastEntry&&<div style={{flex:1,background:C.itemBg,borderRadius:12,padding:"12px",textAlign:"center",border:`1px solid ${C.border}`}}><div style={{fontSize:20,fontWeight:700,color:C.accent}}>{lastEntry.weight} kg</div><div style={{fontSize:10,color:C.muted}}>posledný záznam</div></div>}
+    </div>}
+    {chartEntries.length>1&&<div style={{marginBottom:14}}>
+      <div style={{fontSize:10,fontWeight:700,color:C.gold,letterSpacing:1.5,textTransform:"uppercase",marginBottom:8}}>Graf – 30 dní</div>
+      <div style={{overflowX:"auto"}}><svg width={chartW} height={chartH+20} style={{display:"block"}}>
+        <polyline points={chartEntries.map(e=>`${toX(e.date)},${toY(e.weight)}`).join(" ")} fill="none" stroke="#c9a84c" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round"/>
+        {chartEntries.map(e=><circle key={e.date} cx={toX(e.date)} cy={toY(e.weight)} r={2.5} fill="#c9a84c"/>)}
+        {cycleLog.filter(c=>last30.includes(c.date)).map(c=><g key={c.date}><line x1={toX(c.date)} y1={0} x2={toX(c.date)} y2={chartH} stroke="#c9a84c" strokeWidth={1} strokeDasharray="3,3" opacity="0.5"/><path d={`M${toX(c.date)-4},${chartH+4} Q${toX(c.date)},${chartH+12} ${toX(c.date)+4},${chartH+4}`} fill="#c9a84c" opacity="0.7"/></g>)}
+      </svg></div>
+    </div>}
+    <div style={{marginBottom:14}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+        <div style={{display:"flex",alignItems:"center",gap:6}}><SvgIcon name="droplet" size={16} color="#c9a84c" fill="#c9a84c"/><span style={{fontSize:10,fontWeight:700,color:C.gold,letterSpacing:1.5,textTransform:"uppercase"}}>Cyklus</span></div>
+        <button onClick={()=>setShowCycleForm(!showCycleForm)} style={{background:C.accentLight,border:`1px solid ${C.border}`,borderRadius:8,padding:"4px 10px",cursor:"pointer",color:C.gold,fontSize:11,fontWeight:600,display:"flex",alignItems:"center",gap:4}}><SvgIcon name="droplet" size={12} color="#c9a84c" fill="#c9a84c"/> Zaznačiť</button>
       </div>
-      {diff!==null&&<div style={{display:"flex",gap:10,marginBottom:14}}>
-        <div style={{flex:1,background:C.accentLight,borderRadius:12,padding:"12px",textAlign:"center"}}><div style={{fontSize:20,fontWeight:700,color:C.gold}}>{diff>0?"+":""}{diff} kg</div><div style={{fontSize:10,color:C.muted}}>celková zmena</div></div>
-        {lastEntry&&<div style={{flex:1,background:C.itemBg,borderRadius:12,padding:"12px",textAlign:"center",border:`1px solid ${C.border}`}}><div style={{fontSize:20,fontWeight:700,color:C.accent}}>{lastEntry.weight} kg</div><div style={{fontSize:10,color:C.muted}}>posledný záznam</div></div>}
-      </div>}
-      {chartEntries.length>1&&<div style={{marginBottom:14}}>
-        <div style={{fontSize:10,fontWeight:700,color:C.gold,letterSpacing:1.5,textTransform:"uppercase",marginBottom:8}}>Graf – 30 dní</div>
-        <div style={{overflowX:"auto"}}><svg width={chartW} height={chartH+20} style={{display:"block"}}>
-          <polyline points={chartEntries.map(e=>`${toX(e.date)},${toY(e.weight)}`).join(" ")} fill="none" stroke="#c9a84c" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round"/>
-          {chartEntries.map(e=><circle key={e.date} cx={toX(e.date)} cy={toY(e.weight)} r={2.5} fill="#c9a84c"/>)}
-          {cycleLog.filter(c=>last30.includes(c.date)).map(c=><g key={c.date}><line x1={toX(c.date)} y1={0} x2={toX(c.date)} y2={chartH} stroke="#c9a84c" strokeWidth={1} strokeDasharray="3,3" opacity="0.5"/><path d={`M${toX(c.date)-4},${chartH+4} Q${toX(c.date)},${chartH+12} ${toX(c.date)+4},${chartH+4}`} fill="#c9a84c" opacity="0.7"/></g>)}
-        </svg></div>
-      </div>}
-      {/* Cyklus */}
-      <div style={{marginBottom:14}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-          <div style={{display:"flex",alignItems:"center",gap:6}}>
-            <Droplet size={16} color="#c9a84c"/>
-            <span style={{fontSize:10,fontWeight:700,color:C.gold,letterSpacing:1.5,textTransform:"uppercase"}}>Cyklus</span>
-          </div>
-          <button onClick={()=>setShowCycleForm(!showCycleForm)} style={{background:C.accentLight,border:`1px solid ${C.border}`,borderRadius:8,padding:"4px 10px",cursor:"pointer",color:C.gold,fontSize:11,fontWeight:600,display:"flex",alignItems:"center",gap:4}}>
-            <Droplet size={12} color="#c9a84c"/> Zaznačiť
-          </button>
-        </div>
-        {showCycleForm&&<div style={{display:"flex",gap:8,marginBottom:10}}><input type="date" value={cycleDate} onChange={e=>setCycleDate(e.target.value)} style={{...si,flex:1}}/><button onClick={addCycle} style={{background:"#c9a84c",border:"none",borderRadius:10,padding:"8px 14px",color:"#1a1208",fontWeight:700,cursor:"pointer"}}>✓</button></div>}
-        {cycleLog.length>0&&<div style={{background:C.card,borderRadius:14,border:`1px solid ${C.border}`,overflow:"hidden"}}>
-          {cycleLog.slice(-6).reverse().map((c,i,arr)=>(
-            <div key={c.date} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 14px",borderBottom:i<arr.length-1?`1px solid ${C.sepLine}`:"none"}}>
-              <div style={{display:"flex",alignItems:"center",gap:8}}>
-                <Droplet size={14} filled color="#c9a84c"/>
-                <span style={{fontSize:12,color:C.text}}>{new Date(c.date+"T12:00").toLocaleDateString("sk-SK",{day:"numeric",month:"long",year:"numeric"})}</span>
-              </div>
-              <button onClick={()=>delCycle(c.date)} style={{background:"none",border:"none",cursor:"pointer",color:C.border,fontSize:13}}>✕</button>
-            </div>
-          ))}
-        </div>}
-      </div>
-      {entries.length>0&&<div>
-        <div style={{fontSize:10,fontWeight:700,color:C.gold,letterSpacing:1.5,textTransform:"uppercase",marginBottom:8}}>História</div>
-        <div style={{background:C.card,borderRadius:14,border:`1px solid ${C.border}`,overflow:"hidden"}}>
-          {entries.slice(-10).reverse().map((e,i,arr)=>(
-            <div key={e.date} style={{display:"flex",alignItems:"center",padding:"9px 14px",borderBottom:i<arr.length-1?`1px solid ${C.sepLine}`:"none"}}>
-              <span style={{fontSize:11,color:C.muted,minWidth:60}}>{new Date(e.date+"T12:00").toLocaleDateString("sk-SK",{day:"numeric",month:"short"})}</span>
-              <span style={{fontSize:13,fontWeight:600,color:C.text,flex:1}}>{e.weight} kg</span>
-              {cycleSet.has(e.date)&&<Droplet size={12} filled color="#c9a84c"/>}
-              {e.note&&<span style={{fontSize:10,color:C.muted,marginLeft:8}}>{e.note}</span>}
-              <button onClick={()=>delEntry(e.date)} style={{background:"none",border:"none",cursor:"pointer",color:C.border,fontSize:13,marginLeft:8}}>✕</button>
-            </div>
-          ))}
-        </div>
+      {showCycleForm&&<div style={{display:"flex",gap:8,marginBottom:10}}><input type="date" value={cycleDate} onChange={e=>setCycleDate(e.target.value)} style={{...si,flex:1}}/><button onClick={addCycle} style={{background:"#c9a84c",border:"none",borderRadius:10,padding:"8px 14px",color:"#1a1208",fontWeight:700,cursor:"pointer"}}>✓</button></div>}
+      {cycleLog.length>0&&<div style={{background:C.card,borderRadius:14,border:`1px solid ${C.border}`,overflow:"hidden"}}>
+        {cycleLog.slice(-6).reverse().map((c,i,arr)=><div key={c.date} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 14px",borderBottom:i<arr.length-1?`1px solid ${C.sepLine}`:"none"}}>
+          <div style={{display:"flex",alignItems:"center",gap:8}}><SvgIcon name="droplet" size={14} color="#c9a84c" fill="#c9a84c"/><span style={{fontSize:12,color:C.text}}>{new Date(c.date+"T12:00").toLocaleDateString("sk-SK",{day:"numeric",month:"long",year:"numeric"})}</span></div>
+          <button onClick={()=>delCycle(c.date)} style={{background:"none",border:"none",cursor:"pointer",color:C.border,fontSize:13}}>✕</button>
+        </div>)}
       </div>}
     </div>
-  );
+    {entries.length>0&&<div>
+      <div style={{fontSize:10,fontWeight:700,color:C.gold,letterSpacing:1.5,textTransform:"uppercase",marginBottom:8}}>História</div>
+      <div style={{background:C.card,borderRadius:14,border:`1px solid ${C.border}`,overflow:"hidden"}}>
+        {entries.slice(-10).reverse().map((e,i,arr)=><div key={e.date} style={{display:"flex",alignItems:"center",padding:"9px 14px",borderBottom:i<arr.length-1?`1px solid ${C.sepLine}`:"none"}}>
+          <span style={{fontSize:11,color:C.muted,minWidth:60}}>{new Date(e.date+"T12:00").toLocaleDateString("sk-SK",{day:"numeric",month:"short"})}</span>
+          <span style={{fontSize:13,fontWeight:600,color:C.text,flex:1}}>{e.weight} kg</span>
+          {cycleSet.has(e.date)&&<SvgIcon name="droplet" size={12} color="#c9a84c" fill="#c9a84c"/>}
+          {e.note&&<span style={{fontSize:10,color:C.muted,marginLeft:8}}>{e.note}</span>}
+          <button onClick={()=>delEntry(e.date)} style={{background:"none",border:"none",cursor:"pointer",color:C.border,fontSize:13,marginLeft:8}}>✕</button>
+        </div>)}
+      </div>
+    </div>}
+  </div>;
 }
 
-function Stats({C}){
+function Journal({C}){
+  const[entries,setEntries]=useStorage("journal",{});
+  const[moodLog]=useStorage("mood_log",{});
+  const[moods]=useStorage("mood_settings",DEFAULT_MOODS);
+  const[selDate,setSelDate]=useState(todayStr());
+  const[text,setText]=useState("");
+  const[search,setSearch]=useState("");
+  useEffect(()=>{setText(entries[selDate]||"");},[selDate,entries]);
+  const save=()=>{if(text.trim())setEntries(e=>({...e,[selDate]:text.trim()}));else setEntries(e=>{const n={...e};delete n[selDate];return n;});};
+  const tod=todayStr();
+  const allDates=Object.keys(entries).sort((a,b)=>b.localeCompare(a));
+  const filtered=allDates.filter(d=>!search||entries[d].toLowerCase().includes(search.toLowerCase()));
+  const si={border:`1px solid ${C.border}`,borderRadius:10,padding:"8px 10px",fontSize:13,background:C.card,color:C.text,outline:"none"};
+  return <div>
+    <div style={{background:C.accentLight,borderRadius:16,padding:14,marginBottom:16}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+        <div style={{fontSize:9,fontWeight:700,color:C.gold,textTransform:"uppercase",letterSpacing:2}}>Nový záznam</div>
+        <input type="date" value={selDate} onChange={e=>{setSelDate(e.target.value);}} style={{...si,width:"auto",marginBottom:0,padding:"4px 8px",fontSize:12}}/>
+      </div>
+      {/* Mood for this date */}
+      {(()=>{const cm=moodLog[selDate];const mood=moods.find(m=>m.id===cm);return mood&&<div style={{display:"flex",alignItems:"center",gap:6,marginBottom:10}}><div style={{width:10,height:10,borderRadius:"50%",background:"#c9a84c",opacity:mood.opacity}}/><span style={{fontSize:11,color:C.muted}}>{mood.label}</span></div>;})()}
+      <textarea value={text} onChange={e=>setText(e.target.value)}
+        placeholder="Čo sa dnes stalo? Ako sa cítiš? Čo si si uvedomila..."
+        style={{...si,width:"100%",minHeight:120,resize:"vertical",lineHeight:1.7,boxSizing:"border-box",marginBottom:8}}/>
+      <button onClick={save} style={{background:"#c9a84c",border:"none",borderRadius:10,padding:"8px 20px",color:"#1a1208",fontWeight:700,fontSize:13,cursor:"pointer"}}>Uložiť</button>
+    </div>
+    {allDates.length>0&&<>
+      <div style={{display:"flex",gap:8,marginBottom:12}}>
+        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Hľadať v zápiskoch..." style={{flex:1,...si,marginBottom:0}}/>
+        {search&&<button onClick={()=>setSearch("")} style={{background:C.border,border:"none",borderRadius:10,padding:"8px 12px",cursor:"pointer",color:C.muted,fontSize:12}}>✕</button>}
+      </div>
+      <div style={{background:C.card,borderRadius:14,border:`1px solid ${C.border}`,overflow:"hidden"}}>
+        {filtered.map((date,i)=>{
+          const d=new Date(date+"T12:00");
+          const mood=moods.find(m=>m.id===moodLog[date]);
+          const preview=entries[date].slice(0,80)+(entries[date].length>80?"…":"");
+          return <div key={date} onClick={()=>setSelDate(date)} style={{padding:"11px 14px",borderBottom:i<filtered.length-1?`1px solid ${C.sepLine}`:"none",cursor:"pointer",background:selDate===date?C.accentLight:"transparent"}}>
+            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
+              <span style={{fontSize:11,fontWeight:700,color:C.gold}}>{d.getDate()}. {SK_MONTHS[d.getMonth()]} {d.getFullYear()}</span>
+              <span style={{fontSize:10,color:C.muted}}>{SK_DAYS_LONG[d.getDay()]}</span>
+              {mood&&<div style={{width:8,height:8,borderRadius:"50%",background:"#c9a84c",opacity:mood.opacity,marginLeft:"auto",flexShrink:0}}/>}
+            </div>
+            <div style={{fontSize:12,color:C.muted,lineHeight:1.5}}>{preview}</div>
+          </div>;
+        })}
+      </div>
+    </>}
+  </div>;
+}
+
+function Stats({C,moods}){
   const[tasks]=useStorage("tasks",[]);
   const[habits]=useStorage("habits",[]);
   const[challenges]=useStorage("challenges",[]);
   const[weightEntries]=useStorage("weight_entries",[]);
+  const[moodLog]=useStorage("mood_log",{});
   const tod=todayStr(),now=new Date();
   const ws=weekMonday(tod);
   const todayH=habits.filter(h=>habitDueToday(h,tod));
@@ -863,7 +832,7 @@ function Stats({C}){
   const monthStart=new Date(now.getFullYear(),now.getMonth(),1);
   const monthDays=Array.from({length:now.getDate()},(_,i)=>toISO(new Date(now.getFullYear(),now.getMonth(),i+1)));
   let habitDaysTotal=0,habitDaysDone=0;
-  habits.forEach(h=>{monthDays.forEach(day=>{if(habitDueOn(h,day)){habitDaysTotal++;if(h.checks&&h.checks[day])habitDaysDone++;}});});
+  habits.forEach(h=>{monthDays.forEach(day=>{habitDaysTotal++;if(h.checks&&h.checks[day])habitDaysDone++;});});
   const habitMonthPct=habitDaysTotal?Math.round((habitDaysDone/habitDaysTotal)*100):0;
   const monthTasks=tasks.filter(t=>t.date&&t.date>=toISO(monthStart)&&t.date<=tod);
   const monthTasksDone=monthTasks.filter(t=>t.done).length;
@@ -871,119 +840,161 @@ function Stats({C}){
   const monthWeight=weightEntries.filter(e=>e.date>=toISO(monthStart)&&e.date<=tod);
   const firstW=monthWeight[0],lastW=monthWeight[monthWeight.length-1];
   const weightDiff=firstW&&lastW&&monthWeight.length>1?(lastW.weight-firstW.weight).toFixed(1):null;
+  // Mood stats this month
+  const moodCounts={};moods.forEach(m=>{moodCounts[m.id]=monthDays.filter(d=>moodLog[d]===m.id).length;});
+  const topMood=moods.reduce((best,m)=>(moodCounts[m.id]||0)>(moodCounts[best?.id]||0)?m:best,null);
   const SL=({c})=><div style={{fontSize:9,fontWeight:700,color:C.gold,textTransform:"uppercase",letterSpacing:2,marginBottom:10,marginTop:20}}>{c}</div>;
-  const StatRow=({label,done,total,color})=>(
-    <div style={{marginBottom:10}}>
-      <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}><span style={{fontSize:12,color:C.text}}>{label}</span><span style={{fontSize:12,fontWeight:700,color}}>{done}/{total} · {total?Math.round((done/total)*100):0}%</span></div>
-      <Bar pct={total?Math.round((done/total)*100):0} color={color} C={C}/>
+  const StatRow=({label,done,total,color})=><div style={{marginBottom:10}}><div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}><span style={{fontSize:12,color:C.text}}>{label}</span><span style={{fontSize:12,fontWeight:700,color}}>{done}/{total} · {total?Math.round((done/total)*100):0}%</span></div><Bar pct={total?Math.round((done/total)*100):0} color={color} C={C}/></div>;
+  return <div>
+    <SL c="Dnes"/>
+    <StatRow label="Návyky" done={doneH} total={todayH.length||1} color={C.gold}/>
+    <StatRow label="Úlohy" done={doneTasks} total={tasks.length||1} color={C.accent}/>
+    <StatRow label="Výzvy" done={doneWC} total={weekC.length||1} color={C.lav}/>
+    <div style={{background:C.accentLight,borderRadius:14,padding:14,marginTop:14,border:`1px solid ${C.border}`}}>
+      <div style={{fontSize:9,color:C.muted,letterSpacing:1.5,textTransform:"uppercase",marginBottom:4}}>Najdlhší streak</div>
+      <div style={{fontSize:28,fontWeight:700,color:C.gold}}>{maxStreak} <span style={{fontSize:14,fontWeight:400}}>týždňov</span></div>
+      {best&&<div style={{fontSize:11,color:C.muted,marginTop:2}}>{best.name}</div>}
     </div>
-  );
-  return(
-    <div>
-      <SL c="Dnes"/>
-      <StatRow label="Návyky" done={doneH} total={todayH.length||1} color={C.gold}/>
-      <StatRow label="Úlohy" done={doneTasks} total={tasks.length||1} color={C.accent}/>
-      <StatRow label="Výzvy (splnené)" done={doneWC} total={weekC.length||1} color={C.lav}/>
-      <div style={{background:C.accentLight,borderRadius:14,padding:14,marginTop:14,border:`1px solid ${C.border}`}}>
-        <div style={{fontSize:9,color:C.muted,letterSpacing:1.5,textTransform:"uppercase",marginBottom:4}}>Najdlhší streak</div>
-        <div style={{fontSize:28,fontWeight:700,color:C.gold}}>{maxStreak} <span style={{fontSize:14,fontWeight:400}}>dní</span></div>
-        {best&&<div style={{fontSize:11,color:C.muted,marginTop:2}}>{best.name}</div>}
+    {catStats.length>0&&<><SL c="Úlohy podľa kategórie"/>
+      <div style={{background:C.card,borderRadius:14,border:`1px solid ${C.border}`,overflow:"hidden"}}>
+        {catStats.map((tc,i)=><div key={tc.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",borderBottom:i<catStats.length-1?`1px solid ${C.sepLine}`:"none"}}>
+          <CatIcon id={tc.id}/><span style={{fontSize:12,color:C.text,flex:1}}>{tc.label}</span>
+          <div style={{display:"flex",alignItems:"center",gap:8,minWidth:100}}><Bar pct={tc.total?Math.round((tc.done/tc.total)*100):0} color={tc.color} C={C}/><span style={{fontSize:11,fontWeight:700,color:tc.color,minWidth:28}}>{Math.round((tc.done/(tc.total||1))*100)}%</span></div>
+        </div>)}
       </div>
-      {catStats.length>0&&<><SL c="Úlohy podľa kategórie"/>
-        <div style={{background:C.card,borderRadius:14,border:`1px solid ${C.border}`,overflow:"hidden"}}>
-          {catStats.map((tc,i)=>(
-            <div key={tc.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",borderBottom:i<catStats.length-1?`1px solid ${C.sepLine}`:"none"}}>
-              <CatIcon id={tc.id}/>
-              <span style={{fontSize:12,color:C.text,flex:1}}>{tc.label}</span>
-              <div style={{display:"flex",alignItems:"center",gap:8,minWidth:100}}>
-                <Bar pct={tc.total?Math.round((tc.done/tc.total)*100):0} color={tc.color} C={C}/>
-                <span style={{fontSize:11,fontWeight:700,color:tc.color,minWidth:28}}>{Math.round((tc.done/(tc.total||1))*100)}%</span>
-              </div>
-            </div>
-          ))}
-        </div>
-      </>}
-      <SL c={`Zhrnutie – ${SK_MONTHS[now.getMonth()]} ${now.getFullYear()}`}/>
-      {habits.length>0&&<div style={{marginBottom:10}}><StatRow label="Návyky" done={habitDaysDone} total={habitDaysTotal||1} color={C.gold}/><div style={{fontSize:10,color:C.muted,marginTop:2}}>{habitMonthPct>=80?"Výborný mesiac.":habitMonthPct>=50?"Dobrý progres.":"Je priestor na zlepšenie."}</div></div>}
-      {monthTasks.length>0&&<StatRow label="Úlohy" done={monthTasksDone} total={monthTasks.length} color={C.accent}/>}
-      {weightDiff!==null&&<div style={{background:C.accentLight,borderRadius:14,padding:14,marginTop:14,border:`1px solid ${C.border}`}}><div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}><Droplet size={14} color="#c9a84c"/><div style={{fontSize:9,color:C.muted,letterSpacing:1.5,textTransform:"uppercase"}}>Forma</div></div><div style={{fontSize:22,fontWeight:700,color:C.gold}}>{weightDiff>0?"+":""}{weightDiff} kg</div><div style={{fontSize:10,color:C.muted,marginTop:2}}>{firstW.weight} → {lastW.weight} kg</div></div>}
-    </div>
-  );
+    </>}
+    <SL c={`${SK_MONTHS[now.getMonth()]} ${now.getFullYear()}`}/>
+    {habits.length>0&&<div style={{marginBottom:10}}><StatRow label="Návyky" done={habitDaysDone} total={habitDaysTotal||1} color={C.gold}/><div style={{fontSize:10,color:C.muted,marginTop:2}}>{habitMonthPct>=80?"Výborný mesiac.":habitMonthPct>=50?"Dobrý progres.":"Je priestor na zlepšenie."}</div></div>}
+    {monthTasks.length>0&&<StatRow label="Úlohy" done={monthTasksDone} total={monthTasks.length} color={C.accent}/>}
+    {topMood&&Object.values(moodCounts).some(v=>v>0)&&<div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
+      <span style={{fontSize:12,color:C.text}}>Prevažná nálada</span>
+      <div style={{width:10,height:10,borderRadius:"50%",background:"#c9a84c",opacity:topMood.opacity}}/><span style={{fontSize:12,fontWeight:700,color:C.gold}}>{topMood.label}</span>
+    </div>}
+    {weightDiff!==null&&<div style={{background:C.accentLight,borderRadius:14,padding:14,marginTop:4,border:`1px solid ${C.border}`}}><div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}><SvgIcon name="droplet" size={14} color="#c9a84c" fill="#c9a84c"/><div style={{fontSize:9,color:C.muted,letterSpacing:1.5,textTransform:"uppercase"}}>Forma</div></div><div style={{fontSize:22,fontWeight:700,color:C.gold}}>{weightDiff>0?"+":""}{weightDiff} kg</div><div style={{fontSize:10,color:C.muted,marginTop:2}}>{firstW.weight} → {lastW.weight} kg</div></div>}
+  </div>;
 }
 
-function Nastavenia({C}){
+function Nastavenia({C,moods,setMoods}){
   const[tasks]=useStorage("tasks",[]);
   const[habits]=useStorage("habits",[]);
   const[challenges]=useStorage("challenges",[]);
   const[weightEntries]=useStorage("weight_entries",[]);
   const[cycleLog]=useStorage("cycle_log",[]);
+  const[journal]=useStorage("journal",{});
+  const[moodLog]=useStorage("mood_log",{});
   const[msg,setMsg]=useState("");
-  const exportData=()=>{const data={tasks,habits,challenges,weightEntries,cycleLog,exportedAt:new Date().toISOString()};const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download=`dashboard-zaloha-${todayStr()}.json`;a.click();URL.revokeObjectURL(url);setMsg("Záloha stiahnutá ✓");setTimeout(()=>setMsg(""),3000);};
-  const importData=e=>{const file=e.target.files[0];if(!file)return;const reader=new FileReader();reader.onload=ev=>{try{const d=JSON.parse(ev.target.result);const keys=[["tasks","tasks"],["habits","habits"],["challenges","challenges"],["weightEntries","weight_entries"],["cycleLog","cycle_log"]];keys.forEach(([dk,sk])=>{if(d[dk])dbSet(sk,d[dk]).catch(()=>{localStorage.setItem(sk,JSON.stringify(d[dk]));});});setMsg("Import úspešný — obnovte stránku ✓");}catch{setMsg("Chyba pri importe");}};reader.readAsText(file);};
-  return(
-    <div>
-      <div style={{fontSize:9,fontWeight:700,color:C.gold,textTransform:"uppercase",letterSpacing:2,marginBottom:12}}>Záloha dát</div>
-      <div style={{background:C.card,borderRadius:14,border:`1px solid ${C.border}`,overflow:"hidden",marginBottom:16}}>
-        <div style={{padding:"14px 16px",borderBottom:`1px solid ${C.sepLine}`}}>
-          <div style={{fontSize:13,fontWeight:600,color:C.text,marginBottom:4}}>Exportovať dáta</div>
-          <div style={{fontSize:11,color:C.muted,marginBottom:10}}>Stiahnite si zálohu všetkých dát ako JSON súbor.</div>
-          <button onClick={exportData} style={{padding:"8px 16px",background:C.accentLight,border:`1px solid ${C.border}`,borderRadius:10,color:C.gold,fontWeight:600,fontSize:13,cursor:"pointer"}}>Stiahnuť zálohu</button>
+  const[editingMood,setEditingMood]=useState(null);
+  const[moodName,setMoodName]=useState("");
+  const exportData=()=>{const data={tasks,habits,challenges,weightEntries,cycleLog,journal,moodLog,moodSettings:moods,exportedAt:new Date().toISOString()};const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download=`dashboard-${todayStr()}.json`;a.click();URL.revokeObjectURL(url);setMsg("Záloha stiahnutá ✓");setTimeout(()=>setMsg(""),3000);};
+  const importData=e=>{const file=e.target.files[0];if(!file)return;const reader=new FileReader();reader.onload=ev=>{try{const d=JSON.parse(ev.target.result);const keys=[["tasks","tasks"],["habits","habits"],["challenges","challenges"],["weightEntries","weight_entries"],["cycleLog","cycle_log"],["journal","journal"],["moodLog","mood_log"],["moodSettings","mood_settings"]];keys.forEach(([dk,sk])=>{if(d[dk])dbSet(sk,d[dk]).catch(()=>{});});setMsg("Import úspešný — obnovte stránku ✓");}catch{setMsg("Chyba pri importe");}};reader.readAsText(file);};
+  return <div>
+    {/* Nálady */}
+    <div style={{fontSize:9,fontWeight:700,color:C.gold,textTransform:"uppercase",letterSpacing:2,marginBottom:12}}>Nastavenie nálad</div>
+    <div style={{background:C.card,borderRadius:14,border:`1px solid ${C.border}`,overflow:"hidden",marginBottom:20}}>
+      {moods.map((m,i)=>(
+        <div key={m.id} style={{display:"flex",alignItems:"center",gap:12,padding:"11px 14px",borderBottom:i<moods.length-1?`1px solid ${C.sepLine}`:"none"}}>
+          <div style={{width:16,height:16,borderRadius:"50%",background:"#c9a84c",opacity:m.opacity,flexShrink:0}}/>
+          {editingMood===m.id?(
+            <input value={moodName} onChange={e=>setMoodName(e.target.value)} onBlur={()=>{setMoods(ms=>ms.map(x=>x.id===m.id?{...x,label:moodName||x.label}:x));setEditingMood(null);}} autoFocus
+              style={{flex:1,border:`1px solid ${C.border}`,borderRadius:8,padding:"4px 8px",fontSize:13,background:C.card,color:C.text,outline:"none"}}/>
+          ):(
+            <span style={{flex:1,fontSize:13,color:C.text,cursor:"pointer"}} onClick={()=>{setEditingMood(m.id);setMoodName(m.label);}}>{m.label}</span>
+          )}
+          <span style={{fontSize:10,color:C.muted}}>klepnutím upravíte</span>
         </div>
-        <div style={{padding:"14px 16px"}}>
-          <div style={{fontSize:13,fontWeight:600,color:C.text,marginBottom:4}}>Importovať dáta</div>
-          <div style={{fontSize:11,color:C.muted,marginBottom:10}}>Obnovte dáta zo zálohy. Existujúce dáta budú prepísané.</div>
-          <label style={{padding:"8px 16px",background:C.accentLight,border:`1px solid ${C.border}`,borderRadius:10,color:C.gold,fontWeight:600,fontSize:13,cursor:"pointer",display:"inline-block"}}>Vybrať súbor<input type="file" accept=".json" onChange={importData} style={{display:"none"}}/></label>
-        </div>
+      ))}
+    </div>
+    {/* Záloha */}
+    <div style={{fontSize:9,fontWeight:700,color:C.gold,textTransform:"uppercase",letterSpacing:2,marginBottom:12}}>Záloha dát</div>
+    <div style={{background:C.card,borderRadius:14,border:`1px solid ${C.border}`,overflow:"hidden",marginBottom:16}}>
+      <div style={{padding:"14px 16px",borderBottom:`1px solid ${C.sepLine}`}}>
+        <div style={{fontSize:13,fontWeight:600,color:C.text,marginBottom:4}}>Exportovať dáta</div>
+        <div style={{fontSize:11,color:C.muted,marginBottom:10}}>Záloha obsahuje všetky dáta vrátane denníka a nálad.</div>
+        <button onClick={exportData} style={{padding:"8px 16px",background:C.accentLight,border:`1px solid ${C.border}`,borderRadius:10,color:C.gold,fontWeight:600,fontSize:13,cursor:"pointer"}}>Stiahnuť zálohu</button>
       </div>
-      {msg&&<div style={{background:C.accentLight,borderRadius:10,padding:"10px 14px",fontSize:13,color:C.gold,border:`1px solid ${C.border}`,marginBottom:16}}>{msg}</div>}
-      <div style={{background:C.card,borderRadius:14,border:`1px solid ${C.border}`,padding:"14px 16px"}}>
-        <div style={{fontSize:13,color:C.text,marginBottom:6}}>Dáta sú uložené v <b>IndexedDB</b> — nezmažú sa pri mazaní histórie prehliadača.</div>
-        <div style={{fontSize:11,color:C.muted}}>Zálohu odporúčame pri zmene zariadenia alebo prehliadača.</div>
+      <div style={{padding:"14px 16px"}}>
+        <div style={{fontSize:13,fontWeight:600,color:C.text,marginBottom:4}}>Importovať dáta</div>
+        <div style={{fontSize:11,color:C.muted,marginBottom:10}}>Obnoví všetky dáta. Existujúce dáta budú prepísané.</div>
+        <label style={{padding:"8px 16px",background:C.accentLight,border:`1px solid ${C.border}`,borderRadius:10,color:C.gold,fontWeight:600,fontSize:13,cursor:"pointer",display:"inline-block"}}>Vybrať súbor<input type="file" accept=".json" onChange={importData} style={{display:"none"}}/></label>
       </div>
     </div>
-  );
+    {msg&&<div style={{background:C.accentLight,borderRadius:10,padding:"10px 14px",fontSize:13,color:C.gold,border:`1px solid ${C.border}`,marginBottom:16}}>{msg}</div>}
+    <div style={{background:C.card,borderRadius:14,border:`1px solid ${C.border}`,padding:"14px 16px"}}>
+      <div style={{fontSize:13,color:C.text,marginBottom:6}}>Dáta sú uložené v <b>IndexedDB</b> — nezmažú sa pri mazaní histórie.</div>
+      <div style={{fontSize:11,color:C.muted}}>Zálohu odporúčame pri zmene zariadenia.</div>
+    </div>
+  </div>;
 }
 
 const TABS=[
-  {id:"calendar",label:"Kalendár"},{id:"todo",label:"Úlohy"},{id:"habits",label:"Návyky"},
-  {id:"challenges",label:"Výzvy"},{id:"weight",label:"Forma"},{id:"stats",label:"Štatistiky"},{id:"settings",label:"settings"},
+  {id:"calendar",icon:"calendar",label:"Kalendár"},
+  {id:"todo",icon:"tasks",label:"Úlohy"},
+  {id:"habits",icon:"habits",label:"Návyky"},
+  {id:"challenges",icon:"challenges",label:"Výzvy"},
+  {id:"weight",icon:"weight",label:"Forma"},
+  {id:"journal",icon:"journal",label:"Zápisník"},
+  {id:"stats",icon:"stats",label:"Štatistiky"},
+  {id:"settings",icon:"settings",label:"Nastavenia"},
 ];
 
 function App(){
   const[dark,setDark]=useTheme();
   const C=useC(dark);
   const[tab,setTab]=useState("calendar");
+  const[moods,setMoods]=useStorage("mood_settings",DEFAULT_MOODS);
   const now=new Date();
   const dateLabel=now.toLocaleDateString("sk-SK",{weekday:"long",day:"numeric",month:"long",year:"numeric"});
   const nameKey=`${now.getMonth()+1}-${now.getDate()}`;
   const todayName=SK_NAMES[nameKey];
   const quote=getDailyQuote();
-  return(
-    <div style={{minHeight:"100vh",background:C.bg,fontFamily:"sans-serif",color:C.text,transition:"background .3s,color .3s"}}>
-      <SmokeHeader dateLabel={dateLabel} todayName={todayName} quote={quote} dark={dark} setDark={setDark} C={C}/>
-      <div style={{maxWidth:600,margin:"-20px auto 0",padding:"0 clamp(8px,3vw,16px) 40px",position:"relative",zIndex:2}}>
-        <div style={{background:C.card,borderRadius:24,boxShadow:dark?"0 4px 40px rgba(0,0,0,.4)":"0 4px 40px rgba(100,70,20,.10)",border:`1px solid ${C.border}`,overflow:"hidden"}}>
-          <div style={{display:"flex",background:C.smoke,borderBottom:`1px solid ${C.border}`,overflowX:"auto"}}>
-            {TABS.map(t=>(
-              <button key={t.id} onClick={()=>setTab(t.id)}
-                style={{flex:t.id==="settings"?"0 0 36px":"0 0 auto",padding:t.id==="settings"?"11px 0":"13px clamp(6px,2vw,10px)",border:"none",background:"transparent",cursor:"pointer",fontSize:"clamp(8px,2.2vw,10px)",fontWeight:700,color:tab===t.id?"#c9a84c":C.muted,borderBottom:tab===t.id?"2px solid #c9a84c":"2px solid transparent",whiteSpace:"nowrap",letterSpacing:0.3,textTransform:"uppercase",textAlign:"center",display:"flex",alignItems:"center",justifyContent:"center"}}>
-                {t.id==="settings"?<SettingsIcon size={15} color={tab===t.id?"#c9a84c":C.muted}/>:t.label}
-              </button>
-            ))}
-          </div>
-          <div style={{padding:"clamp(14px,4vw,22px) clamp(12px,4vw,18px)"}}>
-            {tab==="calendar"&&<><Calendar C={C}/><TodayPanel C={C}/></>}
-            {tab==="todo"&&<Todo C={C}/>}
-            {tab==="habits"&&<Habits C={C}/>}
-            {tab==="challenges"&&<Challenges C={C}/>}
-            {tab==="weight"&&<Weight C={C}/>}
-            {tab==="stats"&&<Stats C={C}/>}
-            {tab==="settings"&&<Nastavenia C={C}/>}
-          </div>
+
+  // Monthly summary on 1st of month
+  const[showMonthly,setShowMonthly]=useState(()=>{
+    const prev=localStorage.getItem("lastSummaryShown");
+    const prevMonth=new Date();prevMonth.setDate(0);
+    const key=`${prevMonth.getFullYear()}-${prevMonth.getMonth()}`;
+    return now.getDate()===1&&prev!==key;
+  });
+  const[tasks]=useStorage("tasks",[]);
+  const[habits]=useStorage("habits",[]);
+  const[challenges]=useStorage("challenges",[]);
+  const[moodLog]=useStorage("mood_log",{});
+
+  return <div style={{minHeight:"100vh",background:C.bg,fontFamily:"sans-serif",color:C.text,transition:"background .3s,color .3s"}}>
+    <SmokeHeader dateLabel={dateLabel} todayName={todayName} quote={quote} dark={dark} setDark={setDark} C={C}/>
+    <div style={{maxWidth:600,margin:"-20px auto 0",padding:"0 clamp(8px,3vw,16px) 40px",position:"relative",zIndex:2}}>
+      <div style={{background:C.card,borderRadius:24,boxShadow:dark?"0 4px 40px rgba(0,0,0,.4)":"0 4px 40px rgba(100,70,20,.10)",border:`1px solid ${C.border}`,overflow:"hidden"}}>
+        {/* Tab bar — ikony */}
+        <div style={{display:"flex",background:C.smoke,borderBottom:`1px solid ${C.border}`,overflowX:"auto"}}>
+          {TABS.map(t=>(
+            <button key={t.id} onClick={()=>setTab(t.id)} title={t.label}
+              style={{flex:1,padding:"12px 0",border:"none",background:"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",borderBottom:tab===t.id?"2px solid #c9a84c":"2px solid transparent",transition:"border .2s",minWidth:36}}>
+              <SvgIcon name={t.icon} size={16} color={tab===t.id?"#c9a84c":C.muted}/>
+            </button>
+          ))}
+        </div>
+        {/* Tab label */}
+        <div style={{background:C.smoke,borderBottom:`1px solid ${C.border}`,padding:"4px 0 6px",textAlign:"center"}}>
+          <span style={{fontSize:9,fontWeight:700,color:C.gold,letterSpacing:2,textTransform:"uppercase"}}>{TABS.find(t=>t.id===tab)?.label}</span>
+        </div>
+        <div style={{padding:"clamp(14px,4vw,22px) clamp(12px,4vw,18px)"}}>
+          {tab==="calendar"&&<><Calendar C={C} moods={moods}/><TodayPanel C={C} moods={moods}/></>}
+          {tab==="todo"&&<Todo C={C}/>}
+          {tab==="habits"&&<Habits C={C}/>}
+          {tab==="challenges"&&<Challenges C={C}/>}
+          {tab==="weight"&&<Weight C={C}/>}
+          {tab==="journal"&&<Journal C={C}/>}
+          {tab==="stats"&&<Stats C={C} moods={moods}/>}
+          {tab==="settings"&&<Nastavenia C={C} moods={moods} setMoods={setMoods}/>}
         </div>
       </div>
     </div>
-  );
+    {showMonthly&&(()=>{
+      const prev=new Date();prev.setDate(0);
+      localStorage.setItem("lastSummaryShown",`${prev.getFullYear()}-${prev.getMonth()}`);
+      return <MonthlySummary month={prev.getMonth()} year={prev.getFullYear()} onClose={()=>setShowMonthly(false)} C={C} tasks={tasks} habits={habits} challenges={challenges} moods={moods} moodLog={moodLog}/>;
+    })()}
+  </div>;
 }
 
 ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App));
