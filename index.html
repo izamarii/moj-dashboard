@@ -225,7 +225,7 @@ function TaskForm({initial,onSave,onCancel,C}){
       </div>
       <div style={{fontSize:10,color:C.muted,marginBottom:6,letterSpacing:1,textTransform:"uppercase"}}>Opakovanie</div>
       <div style={{display:"flex",gap:5,marginBottom:8,flexWrap:"wrap"}}>
-        {[["none","Raz"],["daily","Denne"],["weekly","Týžd."],["custom","Vlastné"]].map(([k,v])=>(
+        {[["none","Raz"],["daily","Každý deň"],["weekly","Každý týždeň"],["custom","Vybrané dni"]].map(([k,v])=>(
           <button key={k} onClick={()=>setF(x=>({...x,repeat:k}))} style={{padding:"4px 10px",borderRadius:999,border:"none",cursor:"pointer",fontSize:11,fontWeight:700,background:f.repeat===k?"#c9a84c":C.card,color:f.repeat===k?"#1a1208":C.muted}}>{v}</button>
         ))}
       </div>
@@ -436,7 +436,7 @@ function Todo({C}){
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{display:"flex",alignItems:"center",gap:5,flexWrap:"wrap"}}>
                     <span style={{fontSize:13,fontWeight:500,color:C.text}}>{t.text}</span>
-                    {t.repeat&&t.repeat!=="none"&&<span style={{fontSize:9,background:C.accentLight,color:C.gold,borderRadius:999,padding:"1px 6px",fontWeight:700}}>{t.repeat==="daily"?"Denne":t.repeat==="weekly"?"Týžd.":t.repeat==="custom"?"Vlastné":""}</span>}
+                    {t.repeat&&t.repeat!=="none"&&<span style={{fontSize:9,background:C.accentLight,color:C.gold,borderRadius:999,padding:"1px 6px",fontWeight:700}}>{t.repeat==="daily"?"Každý deň":t.repeat==="weekly"?"Každý týždeň":t.repeat==="custom"?"Vybrané dni":""}</span>}
                   </div>
                   {t.date&&<div style={{fontSize:10,color:C.muted}}>{new Date(t.date+"T12:00").toLocaleDateString("sk-SK",{day:"numeric",month:"long"})}{t.timeFrom?` · ${t.timeFrom}`:""}{t.timeTo?` – ${t.timeTo}`:""}</div>}
                   {t.note&&<div style={{fontSize:10,color:C.muted}}>{t.note}</div>}
